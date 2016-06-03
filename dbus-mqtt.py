@@ -140,7 +140,7 @@ class DbusMqtt(object):
 			return
 		# Publish None when service disappears: the topic will no longer show up when subscribing.
 		# Clients which are already subscribed will receive a single message with empty payload.
-		payload = None if reset else json.dumps(value, ensure_ascii=True).encode('ascii')
+		payload = None if reset else json.dumps(dict(value=value))
 		self._client.publish(topic, payload, retain=True)
 
 	def _publish_all(self):
