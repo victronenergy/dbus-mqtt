@@ -21,7 +21,7 @@ For example:
 
 	dbus-mqtt.py --mqtt-server my.mqqt.server
 
-will connect to your favorite MQTT server, assuming it allows access without authentication.
+will connect to your favorite MQTT broker, assuming it allows access without authentication.
 
 Notifications
 -------------
@@ -32,18 +32,27 @@ The MQTT topic looks like this:
 	N/<portal ID>/<service_type>/<device instance>/<D-Bus path> 
 
   * Portal ID is the VRM portal ID associated with the CCGX.
-  * service type is the part of the D-Bus service name that describes the service.
-  * device instance is a number used to make all services of the same type unique (this value is published
+  * Service type is the part of the D-Bus service name that describes the service.
+  * Device instance is a number used to make all services of the same type unique (this value is published
     on the D-Bus as /DeviceInstance)
 
-The payload if the D-Bus value converted to json wrapped in a dictionary. The messages are retained by the
-broker, so if you subscribe to the broker you'll always get last message for each subscribed topic.
+The payload of the D-Bus value is wrapped in a dictionary and converted to json. The messages are retained by
+the broker, so if you subscribe to the broker you'll always get last message for each subscribed topic.
 
 Example:
 Suppose we have a PV inverter, which reports a total AC power of 936W. The topic of the MQTT message would be:
 
 	Topic: N/e0ff50a097c0/pvinverter/20/Ac/Power
 	Payload: {"value": 936}
+
+The value 20 in the topic is the device instance which may be different.
+
+If you want a roundup of all devices connected to the CCGX subscribe to this topic:
+
+	N/e0ff50a097c0/+/+/ProductId
+
+This also is a convenient way to find out which device instances are used, which comes in hany when there are
+multiple devices of the same type present.
 
 Write requests
 --------------
@@ -60,19 +69,22 @@ On a Hub-4 system we can change the AC-In setpoint with this message:
 The device instance (in this case 257) of a service usually depends on the communication port used the
 connect the device to the CCGX, so it is a good idea to check it before sending write requests. A nice way to
 do this is by subscribing to the broker using wildcards. 
-For example: W/e0ff50a097c0/vebus/+/Hub4/L1/AcPowerSetpoint will get you the list of all registered
-Multis/Quattros (=vebus services) which have the /Hub4/L1/AcPowerSetpoint. You can pick the device instance
-from the topics in the list.
+For example: 
+
+	W/e0ff50a097c0/vebus/+/Hub4/L1/AcPowerSetpoint 
+
+will get you the list of all registered Multis/Quattros (=vebus services) which have publish
+/Hub4/L1/AcPowerSetpoint D-Bus path. You can pick the device instance from the topics in the list.
 
 Read requests
 -------------
 
-A read request will force the script to send a notification message with a specific D-Bus value. Again the
+A read request will force the script to send a notification message of a specific D-Bus value. Again the
 topic is identical to the notification message itself, except that the first character is a 'R'. Wildcards
 in the topic are not supported. The payload will be ignored (it's best to keep it empty).
 
 Example:
-To retrieve the AC power of out favorite PV inverter we send:
+To retrieve the AC power of our favorite PV inverter we send:
 
 	Topic: R/e0ff50a097c0/pvinverter/20/Ac/Power
 	Payload: empty
@@ -83,5 +95,5 @@ The script will reply with this message (make sure you subscribe to it):
 	Payload: {"value": 926}
 
 Normally you do not need to use read requests, because most values are published automatically. There are
-some exception however. Most important are the settings (com.victronenergy.settings on the D-Bus). If you
+some exceptions however. Most important are the settings (com.victronenergy.settings on the D-Bus). If you
 want to retrieve a setting you have to use a read request.
