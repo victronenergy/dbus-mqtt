@@ -358,7 +358,7 @@ def unwrap_dbus_value(val):
 		return bytes([int(val)])
 	if isinstance(val, dbus.Array):
 		v = [unwrap_dbus_value(x) for x in val]
-		return None if val.signature == 'i' and len(v) == 0 else v
+		return None if len(v) == 0 else v
 	if isinstance(val, (dbus.Signature, dbus.String)):
 		return unicode(val)
 	if isinstance(val, dbus.ByteArray):
