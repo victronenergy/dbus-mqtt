@@ -82,6 +82,9 @@ class DbusMqtt(object):
 		self._client = paho.mqtt.client.Client(client_id="ve/dbus-mqtt-py")
 		self._client.on_connect = self._on_connect
 		self._client.on_message = self._on_message
+		self._client.on_disconnect = self._on_disconnect
+		self._socket_watch = None
+		self._socket_timer = None
 		if self._init_mqtt():
 			gobject.timeout_add_seconds(60, self._init_mqtt)
 
@@ -95,11 +98,26 @@ class DbusMqtt(object):
 			else:
 				self._client.tls_set(self._ca_cert, cert_reqs=ssl.CERT_REQUIRED)
 				self._client.connect(self._mqtt_server, 8883, 60)
-			self._client.loop_start()
+			self._init_socket_handlers()
 			return False
 		except:
 			traceback.print_exc()
 			return True
+
+	def _init_socket_handlers(self):
+		if self._socket_watch != None:
+			gobject.source_remove(self._socket_watch)
+		self._socket_watch = gobject.io_add_watch(self._client.socket().fileno(), gobject.IO_IN, self._on_socket_in)
+		if self._socket_timer == None:
+			self._socket_timer = gobject.timeout_add(1000, self._on_socket_timer)
+
+	def _on_socket_in(self, src, condition):
+		self._client.loop_read()
+		return True
+
+	def _on_socket_timer(self):
+		self._client.loop_misc()
+		return True
 
 	def _init_broker(self):
 		if os.path.exists(ConfigPath):
@@ -152,19 +170,25 @@ class DbusMqtt(object):
 			self._publish(topic, value)
 
 	def _on_connect(self, client, userdata, dict, rc):
-		gobject.idle_add(self._on_handle_connect, client, userdata, dict, rc)
-
-	def _on_handle_connect(self, client, userdata, dict, rc):
 		logging.info("[Connected] Result code {}".format(rc))
 		self._client.subscribe('R/{}/#'.format(self._system_id), 0)
 		self._client.subscribe('W/{}/#'.format(self._system_id), 0)
 		# Send all values at once, because may values may have changed when we were disconnected.
 		self._publish_all()
 
-	def _on_message(self, client, userdata, msg):
-		gobject.idle_add(self._on_handle_request, msg)
+	def _on_disconnect(self, client, userdata, rc):
+		gobject.timeout_add(1000, self._reconnect)
 
-	def _on_handle_request(self, msg):
+	def _reconnect(self):
+		try:
+			self._client.reconnect()
+			self._init_socket_handlers()
+			return False
+		except:
+			# traceback.print_exc()
+			return True
+
+	def _on_message(self, client, userdata, msg):
 		try:
 			logging.debug('[Request] {}: {}'.format(msg.topic, str(msg.payload)))
 			action, system_id, path = msg.topic.split('/', 2)
@@ -404,7 +428,7 @@ if __name__ == '__main__':
 	logger = setup_logging(args.debug)
 
 	# This allows us to use gobject code in new threads
-	gobject.threads_init()
+	# gobject.threads_init()
 	mainloop = gobject.MainLoop()
 	# Have a mainloop, so we can send/receive asynchronous calls to and from dbus
 	DBusGMainLoop(set_as_default=True)
