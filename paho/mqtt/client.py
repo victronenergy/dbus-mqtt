@@ -419,7 +419,6 @@ class Client(object):
         self._protocol = protocol
         self._userdata = userdata
         self._sock = None
-        self._sockpairR, self._sockpairW = _socketpair_compat()
         self._keepalive = 60
         self._message_retry = 20
         self._last_retry_check = 0
@@ -498,12 +497,6 @@ class Client(object):
         elif self._sock:
             self._sock.close()
             self._sock = None
-        if self._sockpairR:
-            self._sockpairR.close()
-            self._sockpairR = None
-        if self._sockpairW:
-            self._sockpairW.close()
-            self._sockpairW = None
 
         self.__init__(client_id, clean_session, userdata)
 
@@ -792,9 +785,7 @@ class Client(object):
         self._out_packet_mutex.release()
         self._current_out_packet_mutex.release()
 
-        # sockpairR is used to break out of select() before the timeout, on a
-        # call to publish() etc.
-        rlist = [self.socket(), self._sockpairR]
+        rlist = [self.socket()]
         try:
             socklist = select.select(rlist, wlist, [], timeout)
         except TypeError:
@@ -811,17 +802,6 @@ class Client(object):
             rc = self.loop_read(max_packets)
             if rc or (self._ssl is None and self._sock is None):
                 return rc
-
-        if self._sockpairR in socklist[0]:
-            # Stimulate output write even though we didn't ask for it, because
-            # at that point the publish or other command wasn't present.
-            socklist[1].insert(0, self.socket())
-            # Clear sockpairR - only ever a single byte written.
-            try:
-                self._sockpairR.recv(1)
-            except socket.error as err:
-                if err.errno != EAGAIN:
-                    raise
 
         if self.socket() in socklist[1]:
             rc = self.loop_write(max_packets)
@@ -1494,13 +1474,13 @@ class Client(object):
         self._current_out_packet_mutex.acquire()
 
         while self._current_out_packet:
-            packet = self._current_out_packet
+            packet, command, pos, to_process, qos, mid = self._current_out_packet
 
             try:
                 if self._ssl:
-                    write_length = self._ssl.write(packet['packet'][packet['pos']:])
+                    write_length = self._ssl.write(packet[pos:])
                 else:
-                    write_length = self._sock.send(packet['packet'][packet['pos']:])
+                    write_length = self._sock.send(packet[pos:])
             except AttributeError:
                 self._current_out_packet_mutex.release()
                 return MQTT_ERR_SUCCESS
@@ -1514,20 +1494,20 @@ class Client(object):
                 return 1
 
             if write_length > 0:
-                packet['to_process'] = packet['to_process'] - write_length
-                packet['pos'] = packet['pos'] + write_length
+                to_process -= write_length
+                pos += write_length
 
-                if packet['to_process'] == 0:
-                    if (packet['command'] & 0xF0) == PUBLISH and packet['qos'] == 0:
+                if to_process == 0:
+                    if (command & 0xF0) == PUBLISH and qos == 0:
                         self._callback_mutex.acquire()
                         if self.on_publish:
                             self._in_callback = True
-                            self.on_publish(self, self._userdata, packet['mid'])
+                            self.on_publish(self, self._userdata, mid)
                             self._in_callback = False
 
                         self._callback_mutex.release()
 
-                    if (packet['command'] & 0xF0) == DISCONNECT:
+                    if (command & 0xF0) == DISCONNECT:
                         self._current_out_packet_mutex.release()
 
                         self._msgtime_mutex.acquire()
@@ -1610,8 +1590,8 @@ class Client(object):
 
     def _topic_wildcard_len_check(self, topic):
         # Search for + or # in a topic. Return MQTT_ERR_INVAL if found.
-         # Also returns MQTT_ERR_INVAL if the topic string is too long.
-         # Returns MQTT_ERR_SUCCESS if everything is fine.
+        # Also returns MQTT_ERR_INVAL if the topic string is too long.
+        # Returns MQTT_ERR_SUCCESS if everything is fine.
         if '+' in topic or '#' in topic or len(topic) == 0 or len(topic) > 65535:
             return MQTT_ERR_INVAL
         else:
@@ -1637,45 +1617,21 @@ class Client(object):
         return self._send_command_with_mid(PUBCOMP, mid, False)
 
     def _pack_remaining_length(self, packet, remaining_length):
-        remaining_bytes = []
         while True:
             byte = remaining_length % 128
             remaining_length = remaining_length // 128
             # If there are more digits to encode, set the top bit of this digit
             if remaining_length > 0:
                 byte = byte | 0x80
-
-            remaining_bytes.append(byte)
-            packet.extend(struct.pack("!B", byte))
+            packet.append(byte)
             if remaining_length == 0:
                 # FIXME - this doesn't deal with incorrectly large payloads
                 return packet
 
     def _pack_str16(self, packet, data):
-        if sys.version_info[0] < 3:
-            if isinstance(data, bytearray):
-                packet.extend(struct.pack("!H", len(data)))
-                packet.extend(data)
-            elif isinstance(data, str):
-                udata = data.encode('utf-8')
-                pack_format = "!H" + str(len(udata)) + "s"
-                packet.extend(struct.pack(pack_format, len(udata), udata))
-            elif isinstance(data, unicode):
-                udata = data.encode('utf-8')
-                pack_format = "!H" + str(len(udata)) + "s"
-                packet.extend(struct.pack(pack_format, len(udata), udata))
-            else:
-                raise TypeError
-        else:
-            if isinstance(data, bytearray) or isinstance(data, bytes):
-                packet.extend(struct.pack("!H", len(data)))
-                packet.extend(data)
-            elif isinstance(data, str):
-                udata = data.encode('utf-8')
-                pack_format = "!H" + str(len(udata)) + "s"
-                packet.extend(struct.pack(pack_format, len(udata), udata))
-            else:
-                raise TypeError
+        data_len = len(data)
+        pack_format = "!H%ss" % data_len
+        packet.extend(struct.pack(pack_format, len(data), data))
 
     def _send_publish(self, mid, topic, payload=None, qos=0, retain=False, dup=False):
         if self._sock is None and self._ssl is None:
@@ -1687,23 +1643,14 @@ class Client(object):
         packet.extend(struct.pack("!B", command))
         if payload is None:
             remaining_length = 2+len(utopic)
-            self._easy_log(MQTT_LOG_DEBUG, "Sending PUBLISH (d"+str(dup)+", q"+str(qos)+", r"+str(int(retain))+", m"+str(mid)+", '"+topic+"' (NULL payload)")
         else:
-            if isinstance(payload, str):
-                upayload = payload.encode('utf-8')
-                payloadlen = len(upayload)
-            elif isinstance(payload, bytearray):
-                payloadlen = len(payload)
-            elif isinstance(payload, unicode):
-                upayload = payload.encode('utf-8')
-                payloadlen = len(upayload)
+            payloadlen = len(payload)
 
             remaining_length = 2+len(utopic) + payloadlen
-            self._easy_log(MQTT_LOG_DEBUG, "Sending PUBLISH (d"+str(dup)+", q"+str(qos)+", r"+str(int(retain))+", m"+str(mid)+", '"+topic+"', ... ("+str(payloadlen)+" bytes)")
 
         if qos > 0:
             # For message id
-            remaining_length = remaining_length + 2
+            remaining_length += 2
 
         self._pack_remaining_length(packet, remaining_length)
         self._pack_str16(packet, topic)
@@ -1713,16 +1660,8 @@ class Client(object):
             packet.extend(struct.pack("!H", mid))
 
         if payload is not None:
-            if isinstance(payload, str):
-                pack_format = str(payloadlen) + "s"
-                packet.extend(struct.pack(pack_format, upayload))
-            elif isinstance(payload, bytearray):
-                packet.extend(payload)
-            elif isinstance(payload, unicode):
-                pack_format = str(payloadlen) + "s"
-                packet.extend(struct.pack(pack_format, upayload))
-            else:
-                raise TypeError('payload must be a string, unicode or a bytearray.')
+            pack_format = str(payloadlen) + "s"
+            packet.extend(struct.pack(pack_format, payload))
 
         return self._packet_queue(PUBLISH, packet, mid, qos)
 
@@ -1900,29 +1839,14 @@ class Client(object):
         self._messages_reconnect_reset_in()
 
     def _packet_queue(self, command, packet, mid, qos):
-        mpkt = dict(
-            command = command,
-            mid = mid,
-            qos = qos,
-            pos = 0,
-            to_process = len(packet),
-            packet = packet)
-
         self._out_packet_mutex.acquire()
-        self._out_packet.append(mpkt)
+        # packet, command, pos, to_process, qos, mid = self._current_out_packet
+        self._out_packet.append((packet, command, 0, len(packet), qos, mid))
         if self._current_out_packet_mutex.acquire(False):
             if self._current_out_packet is None and len(self._out_packet) > 0:
                 self._current_out_packet = self._out_packet.pop(0)
             self._current_out_packet_mutex.release()
         self._out_packet_mutex.release()
-
-        # Write a single byte to sockpairW (connected to sockpairR) to break
-        # out of select() if in threaded mode.
-        try:
-            self._sockpairW.send(sockpair_data)
-        except socket.error as err:
-            if err.errno != EAGAIN:
-                raise
 
         if not self._in_callback and self._thread is None:
             return self.loop_write()
