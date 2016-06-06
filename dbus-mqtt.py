@@ -12,6 +12,7 @@ import ssl
 import sys
 import traceback
 from dbus.mainloop.glib import DBusGMainLoop
+from lxml import etree
 
 
 # Victron packages
@@ -237,6 +238,7 @@ class DbusMqtt(object):
 			except dbus.exceptions.DBusException as e:
 				if e.get_dbus_name() == 'org.freedesktop.DBus.Error.UnknownObject' or \
 					e.get_dbus_name() == 'org.freedesktop.DBus.Error.UnknownMethod':
+					self._introspect(service, device_instance, '/', publish)
 					logging.warn('[Scanning] {} does not provide an item listing'.format(service))
 					return
 				else:
@@ -249,6 +251,24 @@ class DbusMqtt(object):
 				logger.info("Service disappeared while being scanned: %s" % serviceName)
 			else:
 				raise
+
+	def _introspect(self, service, device_instance, path, publish=True):
+		value = self._dbus_conn.call_blocking(service, path, None, 'Introspect', '', [])
+		tree = etree.fromstring(value)
+		nodes = tree.findall('node')
+		if len(nodes) == 0:
+			for iface in tree.findall('interface'):
+				if iface.attrib.get('name') == 'com.victronenergy.BusItem':
+					self._add_item(service, device_instance, path, publish=publish)
+		else:
+			for child in nodes:
+				name = child.attrib.get('name')
+				if name != None:
+					if path.endswith('/'):
+						p = path + name
+					else:
+						p = path + '/' + name
+					self._introspect(service, device_instance, p, publish=publish)
 
 	def _on_dbus_value_changed(self, changes, path=None, service_id=None):
 		service = self._service_ids.get(service_id)
