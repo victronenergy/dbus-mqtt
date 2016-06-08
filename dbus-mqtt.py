@@ -90,7 +90,7 @@ class DbusMqtt(object):
 
 	def _init_mqtt(self):
 		try:
-			logging.info('Connecting to MQTT server')
+			logging.info('[Init] Connecting to MQTT server')
 			if self._mqtt_user != None and self._mqtt_passwd != None:
 				self._client.username_pw_set(self._mqtt_user, self._mqtt_passwd)
 			if self._ca_cert == None:
@@ -122,12 +122,12 @@ class DbusMqtt(object):
 	def _init_broker(self):
 		if os.path.exists(ConfigPath):
 			return False
-		logging.info('[InitBroker] Register CCGX at VRM portal')
+		logging.info('[InitBroker] Registering CCGX at VRM portal')
 		identifier = 'ccgxapikey_' + self._system_id
 		password = ''.join("{0:02x}".format(ord(b)) for b in open('/dev/urandom', 'rb').read(16))
 		try:
 			# Write the config before registering the password, so we are sure we have the file on disk before
-			# if registration over internet is successfull
+			# registration over internet is successful
 			config_dir = os.path.dirname(ConfigPath)
 			if not os.path.exists(config_dir):
 				os.makedirs(config_dir)
@@ -141,18 +141,18 @@ class DbusMqtt(object):
 					data=dict(identifier=identifier, mqttPassword=password),
 					headers=headers,
 					verify=CaBundlePath)
-				if r.status_code != requests.codes.ok:
-					raise Exception("VRM registration failed {}".format(r.status_code))
-			# @todo restart mosquitto
-			return False
+				if r.status_code == requests.codes.ok:
+					return False
+				logging.error("VRM registration failed. Http status was: {}".format(r.status_code))
+				logging.error("Message was: {}".format(r.text))
 		except:
-			try:
-				os.remove(ConfigPath)
-			except OSError:
-				pass
 			traceback.print_exc()
-			# Notify the timer we want to be called again
-			return True
+		try:
+			os.remove(ConfigPath)
+		except OSError:
+			pass
+		# Notify the timer we want to be called again
+		return True
 
 	def _publish(self, topic, value, reset=False):
 		if self._keep_alive_interval != None and self._keep_alive_timer == None:
