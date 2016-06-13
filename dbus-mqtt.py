@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 import argparse
 import dbus
+import errno
 import json
 import gobject
 import logging
 import os
 import paho.mqtt.client
 import requests
+import socket
 import ssl
 import sys
 import traceback
@@ -15,10 +17,12 @@ from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
 
 
+import cProfile
+
 # Victron packages
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), 'ext', 'velib_python'))
 from logger import setup_logging
-from ve_utils import get_vrm_portal_id
+from ve_utils import get_vrm_portal_id, exit_on_error
 
 
 SoftwareVersion = '1.00'
@@ -62,7 +66,7 @@ class DbusMqtt(object):
 		self._service_ids = {}
 
 		if init_broker and self._init_broker():
-			gobject.timeout_add_seconds(60, self._init_broker)
+			gobject.timeout_add_seconds(60, exit_on_error, self._init_broker)
 
 		self._dbus_conn.add_signal_receiver(self._on_dbus_value_changed,
 			dbus_interface='com.victronenergy.BusItem', signal_name='PropertiesChanged', path_keyword='path',
@@ -77,7 +81,7 @@ class DbusMqtt(object):
 		self._keep_alive_interval = keep_alive_interval
 		if self._keep_alive_interval != None:
 			self._keep_alive_timer = gobject.timeout_add_seconds(
-				self._keep_alive_interval, self._on_keep_alive_timeout)
+				self._keep_alive_interval, exit_on_error, self._on_keep_alive_timeout)
 
 		self._client = paho.mqtt.client.Client(client_id="ve/dbus-mqtt-py")
 		self._client.on_connect = self._on_connect
@@ -86,7 +90,7 @@ class DbusMqtt(object):
 		self._socket_watch = None
 		self._socket_timer = None
 		if self._init_mqtt():
-			gobject.timeout_add_seconds(60, self._init_mqtt)
+			gobject.timeout_add_seconds(5, exit_on_error, self._init_mqtt)
 
 	def _init_mqtt(self):
 		try:
@@ -100,19 +104,21 @@ class DbusMqtt(object):
 				self._client.connect(self._mqtt_server, 8883, 60)
 			self._init_socket_handlers()
 			return False
-		except:
-			traceback.print_exc()
-			return True
+		except socket.error,e:
+			if e.errno == errno.ECONNREFUSED:
+				return True
+			raise
 
 	def _init_socket_handlers(self):
 		if self._socket_watch != None:
 			gobject.source_remove(self._socket_watch)
-		self._socket_watch = gobject.io_add_watch(self._client.socket().fileno(), gobject.IO_IN, self._on_socket_in)
+		self._socket_watch = gobject.io_add_watch(self._client.socket().fileno(), gobject.IO_IN, 
+			self._on_socket_in)
 		if self._socket_timer == None:
-			self._socket_timer = gobject.timeout_add(1000, self._on_socket_timer)
+			self._socket_timer = gobject.timeout_add_seconds(1000, exit_on_error, self._on_socket_timer)
 
 	def _on_socket_in(self, src, condition):
-		self._client.loop_read()
+		exit_on_error(self._client.loop_read)
 		return True
 
 	def _on_socket_timer(self):
@@ -184,9 +190,10 @@ class DbusMqtt(object):
 			self._client.reconnect()
 			self._init_socket_handlers()
 			return False
-		except:
-			# traceback.print_exc()
-			return True
+		except socket.error,e:
+			if e.errno == errno.ECONNREFUSED:
+				return True
+			raise
 
 	def _on_message(self, client, userdata, msg):
 		try:
@@ -346,7 +353,7 @@ class DbusMqtt(object):
 		else:
 			gobject.remove_object(self._keep_alive_timer)
 		self._keep_alive_timer = gobject.timeout_add_seconds(
-			self._keep_alive_interval, self._on_keep_alive_timeout)
+			self._keep_alive_interval, exit_on_error, self._on_keep_alive_timeout)
 		if restart:
 			# Do this after self._keep_alive_timer is set, because self._publish used it check if it should
 			# publish
