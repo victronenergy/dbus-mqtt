@@ -164,6 +164,8 @@ class DbusMqtt(object):
 	def _publish(self, topic, value, reset=False):
 		if self._keep_alive_interval != None and self._keep_alive_timer == None:
 			return
+		if self._socket_watch == None:
+			return
 		# Publish None when service disappears: the topic will no longer show up when subscribing.
 		# Clients which are already subscribed will receive a single message with empty payload.
 		payload = None if reset else json.dumps(dict(value=value))
@@ -177,14 +179,18 @@ class DbusMqtt(object):
 			self._publish(topic, value)
 
 	def _on_connect(self, client, userdata, dict, rc):
-		logging.info("[Connected] Result code {}".format(rc))
+		logging.info('[Connected] Result code {}'.format(rc))
 		self._client.subscribe('R/{}/#'.format(self._system_id), 0)
 		self._client.subscribe('W/{}/#'.format(self._system_id), 0)
 		# Send all values at once, because may values may have changed when we were disconnected.
 		self._publish_all()
 
 	def _on_disconnect(self, client, userdata, rc):
-		gobject.timeout_add(1000, self._reconnect)
+		logging.error('[Disconnected] Lost connection to broker')
+		if self._socket_watch != None:
+			gobject.source_remove(self._socket_watch)
+			self._socket_watch = None
+		gobject.timeout_add(5000, exit_on_error, self._reconnect)
 
 	def _reconnect(self):
 		try:
