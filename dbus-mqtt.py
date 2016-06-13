@@ -127,6 +127,7 @@ class DbusMqtt(object):
 
 	def _init_broker(self):
 		if os.path.exists(ConfigPath):
+			logging.info('[InitBroker] Skipping registration')
 			return False
 		logging.info('[InitBroker] Registering CCGX at VRM portal')
 		identifier = 'ccgxapikey_' + self._system_id
@@ -149,8 +150,8 @@ class DbusMqtt(object):
 					verify=CaBundlePath)
 				if r.status_code == requests.codes.ok:
 					return False
-				logging.error("VRM registration failed. Http status was: {}".format(r.status_code))
-				logging.error("Message was: {}".format(r.text))
+				logging.error('VRM registration failed. Http status was: {}'.format(r.status_code))
+				logging.error('Message was: {}'.format(r.text))
 		except:
 			traceback.print_exc()
 		try:
