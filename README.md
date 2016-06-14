@@ -1,7 +1,7 @@
 dbus-mqtt
 =========
 
-A python script that publishes values from the D-Bus to an MQTT broker. The script also supports requests 
+A python script that publishes values from the D-Bus to an MQTT broker. The script also supports requests
 from the MQTT broker to change values on the local D-Bus. This script only works with the D-Bus interface
 defined for use with the Color Control GX (CCGX).
 
@@ -27,9 +27,9 @@ Notifications
 -------------
 
 When a value on the D-Bus changes, the script will send a message to the broker.
-The MQTT topic looks like this: 
+The MQTT topic looks like this:
 
-	N/<portal ID>/<service_type>/<device instance>/<D-Bus path> 
+	N/<portal ID>/<service_type>/<device instance>/<D-Bus path>
 
   * Portal ID is the VRM portal ID associated with the CCGX.
   * Service type is the part of the D-Bus service name that describes the service.
@@ -68,10 +68,10 @@ On a Hub-4 system we can change the AC-In setpoint with this message:
 
 The device instance (in this case 257) of a service usually depends on the communication port used the
 connect the device to the CCGX, so it is a good idea to check it before sending write requests. A nice way to
-do this is by subscribing to the broker using wildcards. 
-For example: 
+do this is by subscribing to the broker using wildcards.
+For example:
 
-	W/e0ff50a097c0/vebus/+/Hub4/L1/AcPowerSetpoint 
+	W/e0ff50a097c0/vebus/+/Hub4/L1/AcPowerSetpoint
 
 will get you the list of all registered Multis/Quattros (=vebus services) which have publish
 /Hub4/L1/AcPowerSetpoint D-Bus path. You can pick the device instance from the topics in the list.
@@ -97,3 +97,22 @@ The script will reply with this message (make sure you subscribe to it):
 Normally you do not need to use read requests, because most values are published automatically. There are
 some exceptions however. Most important are the settings (com.victronenergy.settings on the D-Bus). If you
 want to retrieve a setting you have to use a read request.
+
+Connecting to the victron MQTT server
+-------------------------------------
+
+It is possible to forward all MQTT traffic from the CCGX to the victron MQTT server (mqtt.victronenergy.com).
+If the script is started with the --init-broker option, it will register itself to the server. You can connect
+to the MQTT server using you VRM username (email address) and password. All communication is encrypted
+using SSL. Therefore you need the ca-certificate - ccgx-ca.crt - in this repository.
+
+A convenient way to test this is using the mosquitto_sub tool, which is part of mosquitto (on debian linux
+you need to install the mosquitto-clients package).
+
+This command will get you the total system consumption:
+
+	mosquitto_sub -v -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile ccgx-ca.crt -p 8883
+
+If you have Full Control permissions on the VRM site, write requests will also be processed. For example:
+
+	mosquitto_pub -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile ccgx-ca.crt -p 8883
