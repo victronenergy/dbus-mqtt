@@ -62,9 +62,13 @@ class DbusMqtt(object):
 
 		# @todo EV Get portal ID from com.victronenergy.system?
 		self._system_id = get_vrm_portal_id()
+		# Key: D-BUS Service + path, value: topic
 		self._topics = {}
+		# Key: topic, value: last value seen on D-Bus
 		self._values = {}
+		# Key: service_type/device_instance, value: D-Bus service name
 		self._services = {}
+		# Key: short D-Bus service name (eg. 1:31), value: full D-Bus service name (eg. com.victronenergy.settings)
 		self._service_ids = {}
 
 		if init_broker and self._init_broker():
@@ -321,7 +325,15 @@ class DbusMqtt(object):
 		uid = service + path
 		topic = self._topics.get(uid)
 		if topic == None:
-			return
+			for service_short_name, service_name in self._services.items():
+				if service_name == service:
+					device_instance = service_short_name.split('/')[1]
+					self._add_item(service, device_instance, path, publish=False, get_value=False)
+					logging.info('New item found: {}{}'.format(service_short_name, path))
+					topic = self._topics[uid]
+					break
+			else:
+				return
 		value = changes.get("Value")
 		if value == None:
 			return
@@ -335,7 +347,7 @@ class DbusMqtt(object):
 		uid = service + path
 		r = self._topics.get(uid)
 		if r != None:
-			return r
+			return
 		topic = 'N/{}/{}/{}{}'.format(self._system_id, get_service_type(service), device_instance, path)
 		self._topics[uid] = topic
 		if get_value:
