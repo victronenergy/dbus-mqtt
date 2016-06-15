@@ -408,10 +408,8 @@ def unwrap_dbus_value(val):
 	a float will be returned.'''
 	if isinstance(val, dbus.Double):
 		return float(val)
-	if isinstance(val, (dbus.Int16, dbus.UInt16, dbus.Int32, dbus.UInt32, dbus.Int64, dbus.UInt64)):
+	if isinstance(val, (dbus.Byte, dbus.Int16, dbus.UInt16, dbus.Int32, dbus.UInt32, dbus.Int64, dbus.UInt64)):
 		return int(val)
-	if isinstance(val, dbus.Byte):
-		return bytes([int(val)])
 	if isinstance(val, dbus.Array):
 		v = [unwrap_dbus_value(x) for x in val]
 		return None if len(v) == 0 else v
