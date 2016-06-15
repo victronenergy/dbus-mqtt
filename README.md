@@ -12,7 +12,7 @@ popular MQTT broker. You can install it on the CCGX with:
 
 	opkg install mosquitto
 
-The broker is not started automatically. You have to start it yourself with the command:
+At the moment, the broker is not started automatically. You have to start it yourself with the command:
 
 	mosquitto -c /etc/mosquitto/mosquitto.conf
 
@@ -31,13 +31,15 @@ The MQTT topic looks like this:
 
 	N/<portal ID>/<service_type>/<device instance>/<D-Bus path>
 
-  * Portal ID is the VRM portal ID associated with the CCGX.
+  * Portal ID is the VRM portal ID associated with the CCGX. You can find the portal ID on the CCGX in
+    Settings->VRM online portal->VRM Portal ID. On the VRM portal itself, you can find the ID in Settings
+    tab.
   * Service type is the part of the D-Bus service name that describes the service.
   * Device instance is a number used to make all services of the same type unique (this value is published
-    on the D-Bus as /DeviceInstance)
+    on the D-Bus as /DeviceInstance).
 
 The payload of the D-Bus value is wrapped in a dictionary and converted to json. The messages are retained by
-the broker, so if you subscribe to the broker you'll always get last message for each subscribed topic.
+the broker, so if you subscribe to the broker you'll always get the last message for each subscribed topic.
 
 Example:
 Suppose we have a PV inverter, which reports a total AC power of 936W. The topic of the MQTT message would be:
@@ -98,10 +100,10 @@ Normally you do not need to use read requests, because most values are published
 some exceptions however. Most important are the settings (com.victronenergy.settings on the D-Bus). If you
 want to retrieve a setting you have to use a read request.
 
-Connecting to the victron MQTT server
+Connecting to the Victron MQTT server
 -------------------------------------
 
-It is possible to forward all MQTT traffic from the CCGX to the victron MQTT server (mqtt.victronenergy.com).
+It is possible to forward all MQTT traffic from the CCGX to the Victron MQTT server (mqtt.victronenergy.com).
 If the script is started with the --init-broker option, it will register itself to the server. You can connect
 to the MQTT server using you VRM username (email address) and password. All communication is encrypted
 using SSL. Therefore you need the ca-certificate - ccgx-ca.crt - in this repository.
