@@ -17,8 +17,6 @@ from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
 
 
-import cProfile
-
 # Victron packages
 AppDir = os.path.dirname(__file__)
 sys.path.insert(1, os.path.join(AppDir, 'ext', 'velib_python'))
@@ -118,7 +116,7 @@ class DbusMqtt(object):
 	def _init_socket_handlers(self):
 		if self._socket_watch != None:
 			gobject.source_remove(self._socket_watch)
-		self._socket_watch = gobject.io_add_watch(self._client.socket().fileno(), gobject.IO_IN, 
+		self._socket_watch = gobject.io_add_watch(self._client.socket().fileno(), gobject.IO_IN,
 			self._on_socket_in)
 		if self._socket_timer == None:
 			self._socket_timer = gobject.timeout_add_seconds(1000, exit_on_error, self._on_socket_timer)
@@ -398,6 +396,8 @@ def wrap_dbus_value(value):
 		return dbus.String(value, variant_level=1)
 	if isinstance(value, list):
 		return dbus.Array([wrap_dbus_value(x) for x in value], variant_level=1)
+	if isinstance(value, long):
+		return dbus.Int64(value, variant_level=1)
 	if isinstance(value, dict):
 		return dbus.Dictionary({(wrap_dbus_value(k), wrap_dbus_value(v)) for k,v in value.items()}, variant_level=1)
 	return value

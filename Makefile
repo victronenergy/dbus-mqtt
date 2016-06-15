@@ -9,7 +9,7 @@ DEST_PAHO_MQTT_DIR = $(bindir)/paho/mqtt
 
 FILES = \
 	$(SRC_DIR)/ccgx-ca.crt \
-	$(SRC_DIR)/dbus-mqtt.py
+	$(SRC_DIR)/dbus_mqtt.py
 
 PAHO_FILES = \
 	$(SRC_PAHO_DIR)/__init__.py
