@@ -49,6 +49,15 @@ Suppose we have a PV inverter, which reports a total AC power of 936W. The topic
 
 The value 20 in the topic is the device instance which may be different.
 
+There are 2 special cases.
+  * A D-Bus value may be invalid. This happens with values that are not always present. For example: a single
+    phase PV inverter will not provide a power value on phase 2. So /Ac/L2/Power is invalid. In that case the
+    payload of the MQTT message will be {"value": null}.
+  * A device may disappear from the D-Bus. For example: most PV inverters shut down at night, causing a
+    communication breakdown. If this happens a notification will be sent for all topics related to the device.
+    The payload will be empty (zero bytes, so no valid JSON). This will force the broker to remove the items
+    from the list of retained topics.
+
 If you want a roundup of all devices connected to the CCGX subscribe to this topic:
 
 	N/e0ff50a097c0/+/+/ProductId
@@ -86,7 +95,7 @@ topic is identical to the notification message itself, except that the first cha
 in the topic are not supported. The payload will be ignored (it's best to keep it empty).
 
 Example:
-To retrieve the AC power of our favorite PV inverter we send:
+To retrieve the AC power of our favorite PV inverter we publish:
 
 	Topic: R/e0ff50a097c0/pvinverter/20/Ac/Power
 	Payload: empty
