@@ -30,6 +30,8 @@ help :
 	@ echo " help - print this message"
 	@ echo " install - install everything"
 
+clean: ;
+
 install_app : $(FILES)
 	@if [ "$^" != "" ]; then \
 		$(INSTALL_CMD) -d $(DESTDIR)$(bindir); \
