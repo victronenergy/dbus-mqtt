@@ -7,21 +7,10 @@ defined for use with the Color Control GX (CCGX).
 
 Set-up
 ------
-Right now, there is no MQTT broker running on the CCGX itself. There is a package for mosquitto, which is a
-popular MQTT broker. You can install it on the CCGX with:
-
-	opkg install mosquitto
-
-At the moment, the broker is not started automatically. You have to start it yourself with the command:
-
-	mosquitto -c /etc/mosquitto/mosquitto.conf
-
-It is also possible to connect the a MQTT broker elsewhere using the command line options of the script.
-For example:
-
-	dbus-mqtt.py --mqtt-server my.mqqt.server
-
-will connect to your favorite MQTT broker, assuming it allows access without authentication.
+Starting from CCGX version 1.70, dbus-mqtt is installed by default, but is not enabled. You can enable it in
+Settings->Services. The dbus-mqtt server will connect to the mosquitto broker that is also installed and
+enabled at the same time. The CCGX will also register himself to the victron MQTT broker, see
+'Connecting to the Victron MQTT server' below.
 
 Notifications
 -------------
@@ -77,14 +66,17 @@ On a Hub-4 system we can change the AC-In setpoint with this message:
 	Topic: W/e0ff50a097c0/vebus/257/Hub4/L1/AcPowerSetpoint
 	Payload: {"value": -200}
 
+Important: do not set the retain flag in write requests, because that would cause the request to be repeated
+each time the MQTT-service connects to the broker.
+
 The device instance (in this case 257) of a service usually depends on the communication port used the
 connect the device to the CCGX, so it is a good idea to check it before sending write requests. A nice way to
 do this is by subscribing to the broker using wildcards.
 For example:
 
-	W/e0ff50a097c0/vebus/+/Hub4/L1/AcPowerSetpoint
+	N/e0ff50a097c0/vebus/+/Hub4/L1/AcPowerSetpoint
 
-will get you the list of all registered Multis/Quattros (=vebus services) which have publish
+will get you the list of all registered Multis/Quattros (=vebus services) which have published
 /Hub4/L1/AcPowerSetpoint D-Bus path. You can pick the device instance from the topics in the list.
 
 Read requests
@@ -112,10 +104,12 @@ want to retrieve a setting you have to use a read request.
 Connecting to the Victron MQTT server
 -------------------------------------
 
-It is possible to forward all MQTT traffic from the CCGX to the Victron MQTT server (mqtt.victronenergy.com).
-If the script is started with the --init-broker option, it will register itself to the server. You can connect
-to the MQTT server using you VRM username (email address) and password. All communication is encrypted
-using SSL. Therefore you need the ca-certificate - ccgx-ca.crt - in this repository.
+If the MQTT service is enabled, the CCGX will forward all notifications from the CCGX to the Victron MQTT 
+server (mqtt.victronenergy.com). All communication is encrypted using SSL. You can connect to the MQTT
+server using your VRM credentials and subscribe to the notifications send by your CCGX. It is also possible
+to send read and write requests to the CCGX. You can only receive notifications from systems in your own VRM 
+site list, and to send write requests you need the 'Full Control' permission. The 'Monitor Only' permission
+allows subscription to notifications only.
 
 A convenient way to test this is using the mosquitto_sub tool, which is part of mosquitto (on debian linux
 you need to install the mosquitto-clients package).
@@ -127,3 +121,5 @@ This command will get you the total system consumption:
 If you have Full Control permissions on the VRM site, write requests will also be processed. For example:
 
 	mosquitto_pub -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile ccgx-ca.crt -p 8883
+
+Again: do not set the retain flag when sending write requests.
