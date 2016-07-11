@@ -5,12 +5,16 @@ A python script that publishes values from the D-Bus to an MQTT broker. The scri
 from the MQTT broker to change values on the local D-Bus. This script only works with the D-Bus interface
 defined for use with the Color Control GX (CCGX).
 
+By default, dbus-mqtt will connect to a Mosquitto MQTT broker running on the CCGX itself. The broker is
+accessible on the local network at TCP port 1883. Furthermore the broker is configured to forward all
+communication to the central Victron MQTT broker (mqtt.victronenergy.com), which allows you to monitor and
+control your CCGX over the internet. You'll need your VRM credentials to access this broker. See 'Connecting
+to the Victron MQTT server' below.
+
 Set-up
 ------
 Starting from CCGX version 1.70, dbus-mqtt is installed by default, but is not enabled. You can enable it in
-Settings->Services. The dbus-mqtt server will connect to the mosquitto broker that is also installed and
-enabled at the same time. The CCGX will also register himself to the victron MQTT broker, see
-'Connecting to the Victron MQTT server' below.
+Settings->Services.
 
 Notifications
 -------------
@@ -104,14 +108,15 @@ want to retrieve a setting you have to use a read request.
 Connecting to the Victron MQTT server
 -------------------------------------
 
-If the MQTT service is enabled, the CCGX will forward all notifications from the CCGX to the Victron MQTT 
+If the MQTT service is enabled, the CCGX will forward all notifications from the CCGX to the Victron MQTT
 server (mqtt.victronenergy.com). All communication is encrypted using SSL. You can connect to the MQTT
 server using your VRM credentials and subscribe to the notifications send by your CCGX. It is also possible
-to send read and write requests to the CCGX. You can only receive notifications from systems in your own VRM 
-site list, and to send write requests you need the 'Full Control' permission. The 'Monitor Only' permission
-allows subscription to notifications only.
+to send read and write requests to the CCGX. You can only receive notifications from systems in your own VRM
+site list, and to send write requests you need the 'Full Control' permission. This is the default is you have
+registered the system yourself. The 'Monitor Only' permission allows subscription to notifications only
+(read only access).
 
-A convenient way to test this is using the mosquitto_sub tool, which is part of mosquitto (on debian linux
+A convenient way to test this is using the mosquitto_sub tool, which is part of Mosquitto (on debian linux
 you need to install the mosquitto-clients package).
 
 This command will get you the total system consumption:
