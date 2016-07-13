@@ -25,7 +25,7 @@ from logger import setup_logging
 from ve_utils import get_vrm_portal_id, exit_on_error
 
 
-SoftwareVersion = '1.00'
+SoftwareVersion = '1.01'
 ServicePrefix = 'com.victronenergy.'
 VrmApiServer = 'https://ccgxlogging.victronenergy.com'
 CaBundlePath = os.path.join(AppDir, 'venus-ca.crt')
