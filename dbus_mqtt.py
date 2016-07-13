@@ -28,7 +28,7 @@ from ve_utils import get_vrm_portal_id, exit_on_error
 SoftwareVersion = '1.00'
 ServicePrefix = 'com.victronenergy.'
 VrmApiServer = 'https://ccgxlogging.victronenergy.com'
-CaBundlePath = os.path.join(AppDir, 'ccgx-ca.crt')
+CaBundlePath = os.path.join(AppDir, 'venus-ca.crt')
 VrmBroker = 'mqtt.victronenergy.com'
 SettingsPath = os.environ.get('DBUS_MQTT_PATH') or '/data/conf/mosquitto.d'
 BridgeCodesPath = os.path.join(SettingsPath, 'bridge_codes')

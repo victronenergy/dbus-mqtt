@@ -8,7 +8,7 @@ DEST_PAHO_DIR = $(bindir)/paho
 DEST_PAHO_MQTT_DIR = $(bindir)/paho/mqtt
 
 FILES = \
-	$(SRC_DIR)/ccgx-ca.crt \
+	$(SRC_DIR)/venus-ca.crt \
 	$(SRC_DIR)/dbus_mqtt.py \
 	$(SRC_DIR)/mosquitto.conf
 
