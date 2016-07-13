@@ -289,6 +289,8 @@ class DbusMqtt(object):
 					device_instance = 0
 				else:
 					raise
+			except TypeError:
+				device_instance = 0
 			short_service_name = get_short_service_name(service, device_instance)
 			self._services[short_service_name] = service
 			try:
