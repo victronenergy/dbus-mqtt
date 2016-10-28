@@ -121,10 +121,10 @@ you need to install the mosquitto-clients package).
 
 This command will get you the total system consumption:
 
-	mosquitto_sub -v -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile ccgx-ca.crt -p 8883
+	mosquitto_sub -v -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 
 If you have Full Control permissions on the VRM site, write requests will also be processed. For example:
 
-	mosquitto_pub -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile ccgx-ca.crt -p 8883
+	mosquitto_pub -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 
 Again: do not set the retain flag when sending write requests.
