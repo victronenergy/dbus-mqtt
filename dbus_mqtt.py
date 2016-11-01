@@ -122,7 +122,7 @@ class DbusMqtt(object):
 		self._socket_watch = gobject.io_add_watch(self._client.socket().fileno(), gobject.IO_IN,
 			self._on_socket_in)
 		if self._socket_timer == None:
-			self._socket_timer = gobject.timeout_add_seconds(1000, exit_on_error, self._on_socket_timer)
+			self._socket_timer = gobject.timeout_add_seconds(1, exit_on_error, self._on_socket_timer)
 
 	def _on_socket_in(self, src, condition):
 		exit_on_error(self._client.loop_read)
@@ -388,7 +388,7 @@ class DbusMqtt(object):
 			logging.info('[KeepAlive] Received request, publishing restarted')
 			restart = True
 		else:
-			gobject.remove_object(self._keep_alive_timer)
+			gobject.source_remove(self._keep_alive_timer)
 		self._keep_alive_timer = gobject.timeout_add_seconds(
 			self._keep_alive_interval, exit_on_error, self._on_keep_alive_timeout)
 		if restart:
@@ -469,7 +469,7 @@ if __name__ == '__main__':
 	parser.add_argument('-P', '--mqtt-password', default=None, help='mqtt password')
 	parser.add_argument('-c', '--mqtt-certificate', default=None, help='path to CA certificate used for SSL communication')
 	parser.add_argument('-b', '--dbus', default=None, help='dbus address')
-	parser.add_argument('-k', '--keep-alive', default=None, help='keep alive interval in seconds', type=int)
+	parser.add_argument('-k', '--keep-alive', default=60, help='keep alive interval in seconds', type=int)
 	parser.add_argument('-i', '--init-broker', action='store_true', help='Tries to setup communication with VRM MQTT broker')
 	args = parser.parse_args()
 
@@ -481,9 +481,10 @@ if __name__ == '__main__':
 	mainloop = gobject.MainLoop()
 	# Have a mainloop, so we can send/receive asynchronous calls to and from dbus
 	DBusGMainLoop(set_as_default=True)
+	keep_alive_interval = args.keep_alive if args.keep_alive > 0 else None
 	handler = DbusMqtt(
 		mqtt_server=args.mqtt_server, ca_cert=args.mqtt_certificate, user=args.mqtt_user,
-		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=args.keep_alive,
+		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
 		init_broker=args.init_broker)
 	# Start and run the mainloop
 	mainloop.run()

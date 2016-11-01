@@ -105,6 +105,17 @@ Normally you do not need to use read requests, because most values are published
 some exceptions however. Most important are the settings (com.victronenergy.settings on the D-Bus). If you
 want to retrieve a setting you have to use a read request.
 
+Keep alive
+----------
+
+In order to avoid a lot of traffic to our cloud server, the script contains a keep-alive mechanism. Default
+keep-alive interval is 60 seconds. If the system does not receive any read or write requests during that
+interval, the notifications will be stopped, until the next read or write request is received.
+So to keep the notifications running, you'll have to send a read request regularly, for example:
+
+	Topic: R/e0ff50a097c0/system/0/Serial
+	Payload: empty
+
 Connecting to the Victron MQTT server
 -------------------------------------
 
