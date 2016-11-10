@@ -121,7 +121,7 @@ Connecting to the Victron MQTT server
 
 If the MQTT service is enabled, the CCGX will forward all notifications from the CCGX to the Victron MQTT
 server (mqtt.victronenergy.com). All communication is encrypted using SSL. You can connect to the MQTT
-server using your VRM credentials and subscribe to the notifications send by your CCGX. It is also possible
+server using your VRM credentials and subscribe to the notifications sent by your CCGX. It is also possible
 to send read and write requests to the CCGX. You can only receive notifications from systems in your own VRM
 site list, and to send write requests you need the 'Full Control' permission. This is the default is you have
 registered the system yourself. The 'Monitor Only' permission allows subscription to notifications only
@@ -139,3 +139,12 @@ If you have Full Control permissions on the VRM site, write requests will also b
 	mosquitto_pub -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 
 Again: do not set the retain flag when sending write requests.
+
+### Websockets
+
+The MQTT service is also accessible through websockets, on port 443, also on
+mqtt.victronenergy.com. This allows for using MQTT from a web browser,
+supporting all aforementioned behavior.
+
+Should you run into HTTP 400 errors, this is because the client needs to
+support the base64 or binary protocol. Read [this](http://stackoverflow.com/questions/15962359) for more information.
