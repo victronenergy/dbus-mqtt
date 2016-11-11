@@ -90,9 +90,7 @@ class DbusMqtt(object):
 
 		# Bus scan may take a log time, so start keep alive after scan
 		self._keep_alive_interval = keep_alive_interval
-		if self._keep_alive_interval != None:
-			self._keep_alive_timer = gobject.timeout_add_seconds(
-				self._keep_alive_interval, exit_on_error, self._on_keep_alive_timeout)
+		self._keep_alive_timer = None
 
 		self._client = paho.mqtt.client.Client(client_id="ve/dbus-mqtt-py")
 		self._client.on_connect = self._on_connect
