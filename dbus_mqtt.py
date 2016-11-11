@@ -137,9 +137,13 @@ class DbusMqtt(object):
 		return True
 
 	def _publish(self, topic, value, reset=False):
-		if self._keep_alive_interval != None and self._keep_alive_timer == None:
-			return
 		if self._socket_watch == None:
+			return
+		if self._keep_alive_interval != None and self._keep_alive_timer == None:
+			# Keep alive enabled, but timer ran out, so no publishes except for system serial
+			if reset or not topic.endswith('/system/0/Serial'):
+				return
+		if reset and topic.endswith('/system/0/Serial'):
 			return
 		# Publish None when service disappears: the topic will no longer show up when subscribing.
 		# Clients which are already subscribed will receive a single message with empty payload.
