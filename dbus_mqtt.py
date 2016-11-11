@@ -134,6 +134,8 @@ class DbusMqtt(object):
 
 	def _on_socket_timer(self):
 		self._client.loop_misc()
+		while self._client.want_write():
+			self._client.loop_write(10)
 		return True
 
 	def _publish(self, topic, value, reset=False):
@@ -146,12 +148,12 @@ class DbusMqtt(object):
 		payload = None if reset else json.dumps(dict(value=value))
 		self._client.publish(topic, payload, retain=True)
 
-	def _publish_all(self):
+	def _publish_all(self, reset=False):
 		keys = self._values.keys()
 		keys.sort()
 		for topic in keys:
 			value = self._values[topic]
-			self._publish(topic, value)
+			self._publish(topic, value, reset=reset)
 
 	def _on_connect(self, client, userdata, dict, rc):
 		logging.info('[Connected] Result code {}'.format(rc))
@@ -159,7 +161,7 @@ class DbusMqtt(object):
 		self._client.subscribe('W/{}/#'.format(self._system_id), 0)
 		if self._registrator != None and self._registrator.client_id != None:
 			self._client.subscribe('$SYS/broker/connection/{}/state'.format(self._registrator.client_id), 0)
-		# Send all values at once, because may values may have changed when we were disconnected.
+		# Send all values at once, because values may have changed when we were disconnected.
 		self._publish_all()
 
 	def _on_disconnect(self, client, userdata, rc):
@@ -330,10 +332,10 @@ class DbusMqtt(object):
 		r = self._topics.get(uid)
 		if r != None:
 			return
-		topic = 'N/{}/{}/{}{}'.format(self._system_id, get_service_type(service), device_instance, path)
-		self._topics[uid] = topic
 		if get_value:
 			value = self._get_dbus_value(service, path)
+		topic = 'N/{}/{}/{}{}'.format(self._system_id, get_service_type(service), device_instance, path)
+		self._topics[uid] = topic
 		self._values[topic] = value
 		if publish:
 			self._publish(topic, value)
@@ -348,6 +350,7 @@ class DbusMqtt(object):
 
 	def _on_keep_alive_timeout(self):
 		logging.info('[KeepAlive] Timer trigger, changes are no longer published')
+		self._publish_all(reset=True)
 		self._keep_alive_timer = None
 
 	def _refresh_keep_alive(self):
