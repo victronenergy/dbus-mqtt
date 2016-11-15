@@ -197,11 +197,13 @@ class DbusMqtt(object):
 				self._connected_to_cloud = False
 				self._registrator.register()
 			return
+		refresh_keep_valid = False
 		try:
 			logging.debug('[Request] {}: {}'.format(msg.topic, str(msg.payload)))
 			action, system_id, path = msg.topic.split('/', 2)
 			if system_id != self._system_id:
 				raise Exception('Unknown system id')
+			refresh_keep_valid = True
 			topic = 'N/{}/{}'.format(system_id, path)
 			if action == 'W':
 				self._handle_write(topic, msg.payload)
@@ -210,20 +212,22 @@ class DbusMqtt(object):
 		except:
 			logging.error('[Request] Error in request: {} {}'.format(msg.topic, msg.payload))
 			traceback.print_exc()
+		# Make sure we refresh keep-alive even if the handle read/write failed. The client may request a
+		# value that is temporarily unavailable.
+		if refresh_keep_valid:
+			self._refresh_keep_alive()
 
 	def _handle_write(self, topic, payload):
 		logging.debug('[Write] Writing {} to {}'.format(payload, topic))
 		value = json.loads(payload)['value']
 		service, path = self._get_uid_by_topic(topic, True)
 		self._set_dbus_value(service, path, value)
-		self._refresh_keep_alive()
 
 	def _handle_read(self, topic):
 		logging.debug('[Read] Topic {}'.format(topic))
 		self._get_uid_by_topic(topic, True)
 		value = self._values[topic]
 		self._publish(topic, value)
-		self._refresh_keep_alive()
 
 	def _get_uid_by_topic(self, topic, create=False):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
