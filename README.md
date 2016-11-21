@@ -55,7 +55,7 @@ If you want a roundup of all devices connected to the CCGX subscribe to this top
 
 	N/e0ff50a097c0/+/+/ProductId
 
-This also is a convenient way to find out which device instances are used, which comes in hany when there are
+This also is a convenient way to find out which device instances are used, which comes in handy when there are
 multiple devices of the same type present.
 
 Write requests
@@ -105,16 +105,22 @@ Normally you do not need to use read requests, because most values are published
 some exceptions however. Most important are the settings (com.victronenergy.settings on the D-Bus). If you
 want to retrieve a setting you have to use a read request.
 
-Keep alive
+Keep-alive
 ----------
 
 In order to avoid a lot of traffic to our cloud server, the script contains a keep-alive mechanism. Default
 keep-alive interval is 60 seconds. If the system does not receive any read or write requests during that
-interval, the notifications will be stopped, until the next read or write request is received.
+interval, the notifications will be stopped, until the next read or write request is received. 
 So to keep the notifications running, you'll have to send a read request regularly, for example:
 
 	Topic: R/e0ff50a097c0/system/0/Serial
 	Payload: empty
+
+On a keep-alive timeout (at the end of the 60 second interval), all retained values will be removed from the
+broker (by publishing an empty payload), so subscriptions will yield no result when the keep-alive is not 
+active.
+There is one exception: the CCGX serial number is always available. This is useful if you are communicating
+with a CCGX on the local network: you can subscribe to the serial number to find the portal ID.
 
 Connecting to the Victron MQTT server
 -------------------------------------
