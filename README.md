@@ -140,11 +140,11 @@ If you have Full Control permissions on the VRM site, write requests will also b
 
 Again: do not set the retain flag when sending write requests.
 
-### Websockets
+Websockets
+----------
 
-The MQTT service is also accessible through websockets, on port 443, also on
-mqtt.victronenergy.com. This allows for using MQTT from a web browser,
-supporting all aforementioned behavior.
+The MQTT service on mqtt.victronenergy.com is also accessible through websockets, on port 443. 
+This allows for using MQTT from a web browser, supporting all aforementioned behavior.
 
-Should you run into HTTP 400 errors, this is because the client needs to
-support the base64 or binary protocol. Read [this](http://stackoverflow.com/questions/15962359) for more information.
+Should you run into HTTP 400 errors, this is because the client needs to support the base64 or binary 
+protocol. Read [this](http://stackoverflow.com/questions/15962359) for more information.
