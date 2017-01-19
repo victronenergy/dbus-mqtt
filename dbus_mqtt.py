@@ -225,16 +225,16 @@ class DbusMqtt(object):
 	def _handle_write(self, topic, payload):
 		logging.debug('[Write] Writing {} to {}'.format(payload, topic))
 		value = json.loads(payload)['value']
-		service, path = self._get_uid_by_topic(topic, True)
+		service, path = self._get_uid_by_topic(topic)
 		self._set_dbus_value(service, path, value)
 
 	def _handle_read(self, topic):
 		logging.debug('[Read] Topic {}'.format(topic))
-		self._get_uid_by_topic(topic, True)
+		self._get_uid_by_topic(topic)
 		value,text = self._values[topic]
 		self._publish(topic, value, text)
 
-	def _get_uid_by_topic(self, topic, create=False):
+	def _get_uid_by_topic(self, topic):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
 		device_instance = int(device_instance)
 		service = self._services.get('{}/{}'.format(service_type, device_instance))
