@@ -172,14 +172,18 @@ class DbusMqtt(object):
 		if self._socket_watch != None:
 			gobject.source_remove(self._socket_watch)
 			self._socket_watch = None
+		logging.info('[Disconnected] Set timer')
 		gobject.timeout_add(5000, exit_on_error, self._reconnect)
 
 	def _reconnect(self):
 		try:
+			logging.info('[Reconnect] start')
 			self._client.reconnect()
 			self._init_socket_handlers()
+			logging.info('[Reconnect] success')
 			return False
 		except socket.error,e:
+			logging.error('[Reconnect] failed' + traceback.format_exc())
 			if e.errno == errno.ECONNREFUSED:
 				return True
 			raise
