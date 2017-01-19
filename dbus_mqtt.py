@@ -46,6 +46,7 @@ remote_password {1}
 bridge_cafile {5}
 '''
 VeDbusInvalid = dbus.Array([], signature=dbus.Signature('i'), variant_level=1)
+blocked_items = set([('vebus', u'/Interfaces/Mk2/Tunnel')])
 
 
 class DbusMqtt(object):
@@ -340,7 +341,10 @@ class DbusMqtt(object):
 			return
 		if get_value:
 			value = self._get_dbus_value(service, path)
-		topic = 'N/{}/{}/{}{}'.format(self._system_id, get_service_type(service), device_instance, path)
+		service_type = get_service_type(service)
+		if (service_type, path) in blocked_items:
+			return
+		topic = 'N/{}/{}/{}{}'.format(self._system_id, service_type, device_instance, path)
 		self._topics[uid] = topic
 		self._values[topic] = value
 		if publish:
