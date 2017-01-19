@@ -291,7 +291,9 @@ class DbusMqtt(object):
 		except dbus.exceptions.DBusException,e:
 			if e.get_dbus_name() == 'org.freedesktop.DBus.Error.ServiceUnknown' or \
 				e.get_dbus_name() == 'org.freedesktop.DBus.Error.Disconnected':
-				logger.info("Service disappeared while being scanned: %s" % serviceName)
+				logger.info("[Scanning] Service disappeared while being scanned: %s", service)
+			elif e.get_dbus_name() == 'org.freedesktop.DBus.Error.NoReply':
+				logger.info("[Scanning] No response from service during scan: %s", service)
 			else:
 				raise
 
