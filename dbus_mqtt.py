@@ -49,50 +49,12 @@ VeDbusInvalid = dbus.Array([], signature=dbus.Signature('i'), variant_level=1)
 blocked_items = set([('vebus', u'/Interfaces/Mk2/Tunnel')])
 
 
-class DbusMqtt(object):
-	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None, dbus_address=None,
-				keep_alive_interval=None, init_broker=False):
+class MqttGObjectBridge(object):
+	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None):
 		self._ca_cert = ca_cert
 		self._mqtt_user = user
 		self._mqtt_passwd = passwd
 		self._mqtt_server = mqtt_server or '127.0.0.1'
-		self._dbus_address = dbus_address
-		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
-			if dbus_address == None \
-			else dbus.bus.BusConnection(dbus_address)
-		self._dbus_conn.add_signal_receiver(self._dbus_name_owner_changed, signal_name='NameOwnerChanged')
-		self._connected_to_cloud = False
-
-		# @todo EV Get portal ID from com.victronenergy.system?
-		self._system_id = get_vrm_portal_id()
-		# Key: D-BUS Service + path, value: topic
-		self._topics = {}
-		# Key: topic, value: last value seen on D-Bus
-		self._values = {}
-		# Key: service_type/device_instance, value: D-Bus service name
-		self._services = {}
-		# Key: short D-Bus service name (eg. 1:31), value: full D-Bus service name (eg. com.victronenergy.settings)
-		self._service_ids = {}
-
-		if init_broker:
-			self._registrator = VrmRegistrator(self._system_id)
-			self._registrator.register()
-		else:
-			self._registrator = None
-
-		self._dbus_conn.add_signal_receiver(self._on_dbus_value_changed,
-			dbus_interface='com.victronenergy.BusItem', signal_name='PropertiesChanged', path_keyword='path',
-			sender_keyword='service_id')
-		services = self._dbus_conn.list_names()
-		for service in services:
-			if service.startswith('com.victronenergy.'):
-				self._service_ids[self._dbus_conn.get_name_owner(service)] = service
-				self._scan_dbus_service(service, publish=False)
-
-		# Bus scan may take a log time, so start keep alive after scan
-		self._keep_alive_interval = keep_alive_interval
-		self._keep_alive_timer = None
-
 		self._client = paho.mqtt.client.Client(client_id="ve-dbus-mqtt-py")
 		self._client.on_connect = self._on_connect
 		self._client.on_message = self._on_message
@@ -137,6 +99,76 @@ class DbusMqtt(object):
 			self._client.loop_write(10)
 		return True
 
+	def _on_connect(self, client, userdata, dict, rc):
+		pass
+
+	def _on_message(self, client, userdata, msg):
+		pass
+
+	def _on_disconnect(self, client, userdata, rc):
+		logging.error('[Disconnected] Lost connection to broker')
+		if self._socket_watch != None:
+			gobject.source_remove(self._socket_watch)
+			self._socket_watch = None
+		logging.info('[Disconnected] Set timer')
+		gobject.timeout_add(5000, exit_on_error, self._reconnect)
+
+	def _reconnect(self):
+		try:
+			logging.info('[Reconnect] start')
+			self._client.reconnect()
+			self._init_socket_handlers()
+			logging.info('[Reconnect] success')
+			return False
+		except socket.error, e:
+			logging.error('[Reconnect] failed' + traceback.format_exc())
+			if e.errno == errno.ECONNREFUSED:
+				return True
+			raise
+
+
+class DbusMqtt(MqttGObjectBridge):
+	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None, dbus_address=None,
+				keep_alive_interval=None, init_broker=False):
+		self._dbus_address = dbus_address
+		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
+			if dbus_address == None \
+			else dbus.bus.BusConnection(dbus_address)
+		self._dbus_conn.add_signal_receiver(self._dbus_name_owner_changed, signal_name='NameOwnerChanged')
+		self._connected_to_cloud = False
+
+		# @todo EV Get portal ID from com.victronenergy.system?
+		self._system_id = get_vrm_portal_id()
+		# Key: D-BUS Service + path, value: topic
+		self._topics = {}
+		# Key: topic, value: last value seen on D-Bus
+		self._values = {}
+		# Key: service_type/device_instance, value: D-Bus service name
+		self._services = {}
+		# Key: short D-Bus service name (eg. 1:31), value: full D-Bus service name (eg. com.victronenergy.settings)
+		self._service_ids = {}
+
+		if init_broker:
+			self._registrator = VrmRegistrator(self._system_id)
+			self._registrator.register()
+		else:
+			self._registrator = None
+
+		self._dbus_conn.add_signal_receiver(self._on_dbus_value_changed,
+			dbus_interface='com.victronenergy.BusItem', signal_name='PropertiesChanged', path_keyword='path',
+			sender_keyword='service_id')
+		services = self._dbus_conn.list_names()
+		for service in services:
+			if service.startswith('com.victronenergy.'):
+				self._service_ids[self._dbus_conn.get_name_owner(service)] = service
+				self._scan_dbus_service(service, publish=False)
+
+		# Bus scan may take a log time, so start keep alive after scan
+		self._keep_alive_interval = keep_alive_interval
+		self._keep_alive_timer = None
+
+		MqttGObjectBridge.__init__(self, mqtt_server, ca_cert, user, passwd)
+
 	def _publish(self, topic, value, reset=False):
 		if self._socket_watch == None:
 			return
@@ -159,6 +191,7 @@ class DbusMqtt(object):
 			self._publish(topic, value, reset=reset)
 
 	def _on_connect(self, client, userdata, dict, rc):
+		MqttGObjectBridge._on_connect(self, client, userdata, dict, rc)
 		logging.info('[Connected] Result code {}'.format(rc))
 		self._client.subscribe('R/{}/#'.format(self._system_id), 0)
 		self._client.subscribe('W/{}/#'.format(self._system_id), 0)
@@ -166,27 +199,6 @@ class DbusMqtt(object):
 			self._client.subscribe('$SYS/broker/connection/{}/state'.format(self._registrator.client_id), 0)
 		# Send all values at once, because values may have changed when we were disconnected.
 		self._publish_all()
-
-	def _on_disconnect(self, client, userdata, rc):
-		logging.error('[Disconnected] Lost connection to broker')
-		if self._socket_watch != None:
-			gobject.source_remove(self._socket_watch)
-			self._socket_watch = None
-		logging.info('[Disconnected] Set timer')
-		gobject.timeout_add(5000, exit_on_error, self._reconnect)
-
-	def _reconnect(self):
-		try:
-			logging.info('[Reconnect] start')
-			self._client.reconnect()
-			self._init_socket_handlers()
-			logging.info('[Reconnect] success')
-			return False
-		except socket.error,e:
-			logging.error('[Reconnect] failed' + traceback.format_exc())
-			if e.errno == errno.ECONNREFUSED:
-				return True
-			raise
 
 	def _on_message(self, client, userdata, msg):
 		if msg.topic.startswith('$SYS/broker/connection/'):
