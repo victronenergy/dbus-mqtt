@@ -10,6 +10,8 @@ DEST_PAHO_MQTT_DIR = $(bindir)/paho/mqtt
 FILES = \
 	$(SRC_DIR)/venus-ca.crt \
 	$(SRC_DIR)/dbus_mqtt.py \
+	$(SRC_DIR)/mqtt_gobject_bridge.py \
+	$(SRC_DIR)/vrm_registrator.py \
 	$(SRC_DIR)/mosquitto.conf
 
 PAHO_FILES = \
