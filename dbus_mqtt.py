@@ -41,7 +41,7 @@ topic N/{0}/# out
 topic R/{0}/# in
 topic W/{0}/# in
 remote_clientid {2}
-remote_username ccgxapikey_{0}
+remote_username {6}
 remote_password {1}
 bridge_cafile {5}
 '''
@@ -484,7 +484,7 @@ class VrmRegistrator(object):
 					verify=CaBundlePath)
 				if r.status_code == requests.codes.ok:
 					config = BridgeSettings.format(self._system_id, password, self._client_id, VrmBroker, \
-						SoftwareVersion, CaBundlePath)
+						SoftwareVersion, CaBundlePath, identifier)
 					# Do we need to adjust the settings file?
 					if config != orig_config:
 						logging.info('[InitBroker] Writing new config file')
