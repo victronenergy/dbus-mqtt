@@ -472,16 +472,6 @@ class VrmRegistrator(object):
 				self._client_id = 'ccgx_' + get_random_string(12)
 			if password == None:
 				password = get_random_string(32)
-			config = BridgeSettings.format(self._system_id, password, self._client_id, VrmBroker, SoftwareVersion, CaBundlePath)
-			# Do we need to adjust the settings?
-			if config != orig_config:
-				logging.info('[InitBroker] Writing new config file')
-				config_dir = os.path.dirname(BridgeConfigPath)
-				if not os.path.exists(config_dir):
-					os.makedirs(config_dir)
-				with open(BridgeConfigPath, 'wt') as out_file:
-					out_file.write(config)
-				restart_broker = True
 			# Get to the actual registration
 			logging.info('[InitBroker] Registering CCGX at VRM portal')
 			with requests.Session() as session:
@@ -493,7 +483,16 @@ class VrmRegistrator(object):
 					headers=headers,
 					verify=CaBundlePath)
 				if r.status_code == requests.codes.ok:
-					if restart_broker:
+					config = BridgeSettings.format(self._system_id, password, self._client_id, VrmBroker, \
+						SoftwareVersion, CaBundlePath)
+					# Do we need to adjust the settings file?
+					if config != orig_config:
+						logging.info('[InitBroker] Writing new config file')
+						config_dir = os.path.dirname(BridgeConfigPath)
+						if not os.path.exists(config_dir):
+							os.makedirs(config_dir)
+						with open(BridgeConfigPath, 'wt') as out_file:
+							out_file.write(config)
 						self._restart_broker()
 					self._init_broker_timer = None
 					return False
