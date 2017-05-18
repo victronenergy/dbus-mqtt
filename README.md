@@ -40,7 +40,7 @@ Suppose we have a PV inverter, which reports a total AC power of 936W. The topic
 	Topic: N/e0ff50a097c0/pvinverter/20/Ac/Power
 	Payload: {"value": 936}
 
-The value 20 in the topic is the device instance which may be different.
+The value 20 in the topic is the device instance which may be different on other systems.
 
 There are 2 special cases.
   * A D-Bus value may be invalid. This happens with values that are not always present. For example: a single
@@ -57,6 +57,8 @@ If you want a roundup of all devices connected to the CCGX subscribe to this top
 
 This also is a convenient way to find out which device instances are used, which comes in handy when there are
 multiple devices of the same type present.
+
+*If you try this for the first time on your CCGX, you will probably not get any results. Please read the Keep-alive section below to find out why.*
 
 Write requests
 --------------
@@ -109,7 +111,7 @@ Keep-alive
 ----------
 
 In order to avoid a lot of traffic to our cloud server, the script contains a keep-alive mechanism. Default
-keep-alive interval is 60 seconds. If the system does not receive any read or write requests during that
+keep-alive interval is 60 seconds. If the CCGX does not receive any read or write requests during that
 interval, the notifications will be stopped, until the next read or write request is received. 
 So to keep the notifications running, you'll have to send a read request regularly, for example:
 
@@ -120,7 +122,7 @@ On a keep-alive timeout (at the end of the 60 second interval), all retained val
 broker (by publishing an empty payload), so subscriptions will yield no result when the keep-alive is not 
 active.
 There is one exception: the CCGX serial number is always available. This is useful if you are communicating
-with a CCGX on the local network: you can subscribe to the serial number to find the portal ID.
+with a CCGX on the local network: you can subscribe to the serial number, which is identical to the portal ID.
 
 Connecting to the Victron MQTT server
 -------------------------------------
@@ -140,7 +142,9 @@ This command will get you the total system consumption:
 
 	mosquitto_sub -v -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 	
-(you may need the full path to the cert file /opt/victronenergy/dbus-mqtt-py/venus-ca.crt )
+You may need the full path to the cert file. On the CCGX it is /opt/victronenergy/dbus-mqtt-py/venus-ca.crt. The certificate is also part of this repository.
+
+In case you do not receive the value you expect, please read the keep-alive section.
 
 If you have Full Control permissions on the VRM site, write requests will also be processed. For example:
 
