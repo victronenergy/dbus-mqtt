@@ -62,6 +62,7 @@ class DbusMqtt(object):
 			else dbus.bus.BusConnection(dbus_address)
 		self._dbus_conn.add_signal_receiver(self._dbus_name_owner_changed, signal_name='NameOwnerChanged')
 		self._connected_to_cloud = False
+		self._change_cache = []
 
 		# @todo EV Get portal ID from com.victronenergy.system?
 		self._system_id = get_vrm_portal_id()
@@ -101,6 +102,8 @@ class DbusMqtt(object):
 		self._socket_timer = None
 		if self._init_mqtt():
 			gobject.timeout_add_seconds(5, exit_on_error, self._init_mqtt)
+
+		gobject.timeout_add_seconds(1, exit_on_error, self._on_cache_timer)
 
 	def _init_mqtt(self):
 		try:
@@ -338,7 +341,28 @@ class DbusMqtt(object):
 		value = unwrap_dbus_value(value)
 		text = changes.get("Text")
 		self._values[topic] = value,text
-		self._publish(topic, value, text)
+		# self._publish(topic, value, text)
+		self._change_cache.append((topic.replace('N/' + self._system_id + '/', ''), value, text))
+
+	def _on_cache_timer(self):
+		if self._socket_watch is None:
+			return
+		# if self._keep_alive_interval is not None and self._keep_alive_timer is None:
+		# 	# Keep alive enabled, but timer ran out, so no publishes except for system serial
+		# 	if reset or not topic.endswith('/system/0/Serial'):
+		# 		return
+		# if reset and topic.endswith('/system/0/Serial'):
+		# 	return
+
+		# Publish None when service disappears: the topic will no longer show up when subscribing.
+		# Clients which are already subscribed will receive a single message with empty payload.
+		if len(self._change_cache) == 0:
+			return True
+		topic = 'P/' + self._system_id
+		payload = json.dumps(self._change_cache)
+		self._client.publish(topic, payload, retain=False)
+		self._change_cache = []
+		return True
 
 	def _add_item(self, service, device_instance, path, value=None, text=None, publish=True, get_value=True):
 		if not path.startswith('/'):
