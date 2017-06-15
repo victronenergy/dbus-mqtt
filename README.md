@@ -138,9 +138,14 @@ registered the system yourself. The 'Monitor Only' permission allows subscriptio
 A convenient way to test this is using the mosquitto_sub tool, which is part of Mosquitto (on debian linux
 you need to install the mosquitto-clients package).
 
+Note: because of [this security advisory](https://mosquitto.org/2017/05/security-advisory-cve-2017-7650/), the
+client ID and username can't contain the `+`, `#` or `/` characters. `Mosquitto_pub` and `mosquitto_sub`
+auto-generate the client ID with a `/` in it, so they need to be overridden. The `-I myclient_` takes care
+of that.
+
 This command will get you the total system consumption:
 
-	mosquitto_sub -v -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
+	mosquitto_sub -v -I myclient_ -c -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 	
 You may need the full path to the cert file. On the CCGX it is /opt/victronenergy/dbus-mqtt-py/venus-ca.crt. The certificate is also part of this repository.
 
@@ -148,7 +153,7 @@ In case you do not receive the value you expect, please read the keep-alive sect
 
 If you have Full Control permissions on the VRM site, write requests will also be processed. For example:
 
-	mosquitto_pub -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
+	mosquitto_pub -I myclient_ -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 
 Again: do not set the retain flag when sending write requests.
 
