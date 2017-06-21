@@ -137,7 +137,7 @@ class DbusMqtt(object):
 			self._client.loop_write(10)
 		return True
 
-	def _publish(self, topic, value, text, reset=False):
+	def _publish(self, topic, value, reset=False):
 		if self._socket_watch == None:
 			return
 		if self._keep_alive_interval != None and self._keep_alive_timer == None:
@@ -148,15 +148,15 @@ class DbusMqtt(object):
 			return
 		# Publish None when service disappears: the topic will no longer show up when subscribing.
 		# Clients which are already subscribed will receive a single message with empty payload.
-		payload = None if reset else json.dumps(dict(value=value, text=text))
+		payload = None if reset else json.dumps(dict(value=value))
 		self._client.publish(topic, payload, retain=True)
 
 	def _publish_all(self, reset=False):
 		keys = self._values.keys()
 		keys.sort()
 		for topic in keys:
-			value,text = self._values[topic]
-			self._publish(topic, value, text, reset=reset)
+			value = self._values[topic]
+			self._publish(topic, value, reset=reset)
 
 	def _on_connect(self, client, userdata, dict, rc):
 		logging.info('[Connected] Result code {}'.format(rc))
@@ -231,8 +231,8 @@ class DbusMqtt(object):
 	def _handle_read(self, topic):
 		logging.debug('[Read] Topic {}'.format(topic))
 		self._get_uid_by_topic(topic)
-		value,text = self._values[topic]
-		self._publish(topic, value, text)
+		value = self._values[topic]
+		self._publish(topic, value)
 
 	def _get_uid_by_topic(self, topic):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
@@ -253,7 +253,7 @@ class DbusMqtt(object):
 			logging.info('[OwnerChange] Service disappeared: {}'.format(name))
 			for path, topic in self._topics.items():
 				if path.startswith(name + '/'):
-					self._publish(topic, None, None, reset=True)
+					self._publish(topic, None, reset=True)
 					del self._topics[path]
 					del self._values[topic]
 			if name in self._services:
@@ -278,7 +278,6 @@ class DbusMqtt(object):
 			self._services[short_service_name] = service
 			try:
 				items = self._get_dbus_value(service, '/')
-				texts = self._get_dbus_text(service, '/')
 			except dbus.exceptions.DBusException as e:
 				if e.get_dbus_name() == 'org.freedesktop.DBus.Error.UnknownObject' or \
 					e.get_dbus_name() == 'org.freedesktop.DBus.Error.UnknownMethod':
@@ -288,7 +287,7 @@ class DbusMqtt(object):
 				else:
 					raise
 			for path, value in items.items():
-				self._add_item(service, device_instance, path, value=unwrap_dbus_value(value), text=texts.get(path, ''), publish=publish, get_value=False)
+				self._add_item(service, device_instance, path, value=unwrap_dbus_value(value), publish=publish, get_value=False)
 		except dbus.exceptions.DBusException,e:
 			if e.get_dbus_name() == 'org.freedesktop.DBus.Error.ServiceUnknown' or \
 				e.get_dbus_name() == 'org.freedesktop.DBus.Error.Disconnected':
@@ -336,11 +335,10 @@ class DbusMqtt(object):
 		if value == None:
 			return
 		value = unwrap_dbus_value(value)
-		text = changes.get("Text")
-		self._values[topic] = value,text
-		self._publish(topic, value, text)
+		self._values[topic] = value
+		self._publish(topic, value)
 
-	def _add_item(self, service, device_instance, path, value=None, text=None, publish=True, get_value=True):
+	def _add_item(self, service, device_instance, path, value=None, publish=True, get_value=True):
 		if not path.startswith('/'):
 			path = '/' + path
 		uid = service + path
@@ -349,22 +347,17 @@ class DbusMqtt(object):
 			return
 		if get_value:
 			value = self._get_dbus_value(service, path)
-			text = self._get_dbus_text(service, path)
 		service_type = get_service_type(service)
 		if (service_type, path) in blocked_items:
 			return
 		topic = 'N/{}/{}/{}{}'.format(self._system_id, service_type, device_instance, path)
 		self._topics[uid] = topic
-		self._values[topic] = value,text
+		self._values[topic] = value
 		if publish:
-			self._publish(topic, value, text)
+			self._publish(topic, value)
 
 	def _get_dbus_value(self, service, path):
 		value = self._dbus_conn.call_blocking(service, path, None, 'GetValue', '', [])
-		return unwrap_dbus_value(value)
-
-	def _get_dbus_text(self, service, path):
-		value = self._dbus_conn.call_blocking(service, path, None, 'GetText', '', [])
 		return unwrap_dbus_value(value)
 
 	def _set_dbus_value(self, service, path, value):
