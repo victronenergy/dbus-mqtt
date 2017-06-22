@@ -93,7 +93,7 @@ class DbusMqtt(object):
 		self._keep_alive_interval = keep_alive_interval
 		self._keep_alive_timer = None
 
-		self._client = paho.mqtt.client.Client(client_id="ve/dbus-mqtt-py")
+		self._client = paho.mqtt.client.Client(client_id="ve-dbus-mqtt-py")
 		self._client.on_connect = self._on_connect
 		self._client.on_message = self._on_message
 		self._client.on_disconnect = self._on_disconnect
