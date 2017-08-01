@@ -24,7 +24,7 @@ from mosquitto_bridge_registrator import MosquittoBridgeRegistrator
 SoftwareVersion = '1.02'
 ServicePrefix = 'com.victronenergy.'
 VeDbusInvalid = dbus.Array([], signature=dbus.Signature('i'), variant_level=1)
-blocked_items = set([('vebus', u'/Interfaces/Mk2/Tunnel')])
+blocked_items = {'vebus', u'/Interfaces/Mk2/Tunnel'}
 
 
 class DbusMqtt(MqttGObjectBridge):
@@ -32,7 +32,7 @@ class DbusMqtt(MqttGObjectBridge):
 				keep_alive_interval=None, init_broker=False):
 		self._dbus_address = dbus_address
 		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
-			if dbus_address == None \
+			if dbus_address is None \
 			else dbus.bus.BusConnection(dbus_address)
 		self._dbus_conn.add_signal_receiver(self._dbus_name_owner_changed, signal_name='NameOwnerChanged')
 		self._connected_to_cloud = False
@@ -70,9 +70,9 @@ class DbusMqtt(MqttGObjectBridge):
 		MqttGObjectBridge.__init__(self, mqtt_server, "ve-dbus-mqtt-py", ca_cert, user, passwd)
 
 	def _publish(self, topic, value, reset=False):
-		if self._socket_watch == None:
+		if self._socket_watch is None:
 			return
-		if self._keep_alive_interval != None and self._keep_alive_timer == None:
+		if self._keep_alive_interval is not None and self._keep_alive_timer is None:
 			# Keep alive enabled, but timer ran out, so no publishes except for system serial
 			if reset or not topic.endswith('/system/0/Serial'):
 				return
@@ -95,7 +95,7 @@ class DbusMqtt(MqttGObjectBridge):
 		logging.info('[Connected] Result code {}'.format(rc))
 		self._client.subscribe('R/{}/#'.format(self._system_id), 0)
 		self._client.subscribe('W/{}/#'.format(self._system_id), 0)
-		if self._registrator != None and self._registrator.client_id != None:
+		if self._registrator is not None and self._registrator.client_id is not None:
 			self._client.subscribe('$SYS/broker/connection/{}/state'.format(self._registrator.client_id), 0)
 		# Send all values at once, because values may have changed when we were disconnected.
 		self._publish_all()
@@ -151,7 +151,7 @@ class DbusMqtt(MqttGObjectBridge):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
 		device_instance = int(device_instance)
 		service = self._services.get('{}/{}'.format(service_type, device_instance))
-		if service == None:
+		if service is None:
 			raise Exception('Unknown service')
 		self._add_item(service, device_instance, path, publish=False)
 		return service, '/' + path
@@ -201,7 +201,7 @@ class DbusMqtt(MqttGObjectBridge):
 					raise
 			for path, value in items.items():
 				self._add_item(service, device_instance, path, value=unwrap_dbus_value(value), publish=publish, get_value=False)
-		except dbus.exceptions.DBusException,e:
+		except dbus.exceptions.DBusException, e:
 			if e.get_dbus_name() == 'org.freedesktop.DBus.Error.ServiceUnknown' or \
 				e.get_dbus_name() == 'org.freedesktop.DBus.Error.Disconnected':
 				logger.info("[Scanning] Service disappeared while being scanned: %s", service)
@@ -221,7 +221,7 @@ class DbusMqtt(MqttGObjectBridge):
 		else:
 			for child in nodes:
 				name = child.attrib.get('name')
-				if name != None:
+				if name is not None:
 					if path.endswith('/'):
 						p = path + name
 					else:
@@ -230,11 +230,11 @@ class DbusMqtt(MqttGObjectBridge):
 
 	def _on_dbus_value_changed(self, changes, path=None, service_id=None):
 		service = self._service_ids.get(service_id)
-		if service == None:
+		if service is None:
 			return
 		uid = service + path
 		topic = self._topics.get(uid)
-		if topic == None:
+		if topic is None:
 			for service_short_name, service_name in self._services.items():
 				if service_name == service:
 					device_instance = service_short_name.split('/')[1]
@@ -245,7 +245,7 @@ class DbusMqtt(MqttGObjectBridge):
 			else:
 				return
 		value = changes.get("Value")
-		if value == None:
+		if value is None:
 			return
 		value = unwrap_dbus_value(value)
 		self._values[topic] = value
@@ -256,7 +256,7 @@ class DbusMqtt(MqttGObjectBridge):
 			path = '/' + path
 		uid = service + path
 		r = self._topics.get(uid)
-		if r != None:
+		if r is not None:
 			return
 		if get_value:
 			value = self._get_dbus_value(service, path)
@@ -283,10 +283,10 @@ class DbusMqtt(MqttGObjectBridge):
 		self._keep_alive_timer = None
 
 	def _refresh_keep_alive(self):
-		if self._keep_alive_interval == None:
+		if self._keep_alive_interval is None:
 			return
 		restart = False
-		if self._keep_alive_timer == None:
+		if self._keep_alive_timer is None:
 			logging.info('[KeepAlive] Received request, publishing restarted')
 			restart = True
 		else:
