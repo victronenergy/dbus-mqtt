@@ -16,9 +16,9 @@ from lxml import etree
 AppDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(1, os.path.join(AppDir, 'ext', 'velib_python'))
 from logger import setup_logging
-from ve_utils import get_vrm_portal_id, exit_on_error
+from ve_utils import get_vrm_portal_id, exit_on_error, wrap_dbus_value, unwrap_dbus_value
 from mqtt_gobject_bridge import MqttGObjectBridge
-from vrm_registrator import VrmRegistrator
+from mosquitto_bridge_registrator import MosquittoBridgeRegistrator
 
 
 SoftwareVersion = '1.02'
@@ -49,7 +49,7 @@ class DbusMqtt(MqttGObjectBridge):
 		self._service_ids = {}
 
 		if init_broker:
-			self._registrator = VrmRegistrator(self._system_id, SoftwareVersion)
+			self._registrator = MosquittoBridgeRegistrator(self._system_id)
 			self._registrator.register()
 		else:
 			self._registrator = None
@@ -297,49 +297,6 @@ class DbusMqtt(MqttGObjectBridge):
 			# Do this after self._keep_alive_timer is set, because self._publish used it check if it should
 			# publish
 			self._publish_all()
-
-
-def wrap_dbus_value(value):
-	if value == None:
-		return VeDbusInvalid
-	if isinstance(value, float):
-		return dbus.Double(value, variant_level=1)
-	if isinstance(value, bool):
-		return dbus.Boolean(value, variant_level=1)
-	if isinstance(value, int):
-		return dbus.Int32(value, variant_level=1)
-	if isinstance(value, str):
-		return dbus.String(value, variant_level=1)
-	if isinstance(value, list):
-		return dbus.Array([wrap_dbus_value(x) for x in value], variant_level=1)
-	if isinstance(value, long):
-		return dbus.Int64(value, variant_level=1)
-	if isinstance(value, dict):
-		return dbus.Dictionary({(wrap_dbus_value(k), wrap_dbus_value(v)) for k,v in value.items()}, variant_level=1)
-	return value
-
-
-def unwrap_dbus_value(val):
-	''''Converts D-Bus values back to the original type. For example if val is of type DBus.Double,
-	a float will be returned.'''
-	if isinstance(val, dbus.Double):
-		return float(val)
-	if isinstance(val, (dbus.Byte, dbus.Int16, dbus.UInt16, dbus.Int32, dbus.UInt32, dbus.Int64, dbus.UInt64)):
-		return int(val)
-	if isinstance(val, dbus.Array):
-		v = [unwrap_dbus_value(x) for x in val]
-		return None if len(v) == 0 else v
-	if isinstance(val, (dbus.Signature, dbus.String)):
-		return unicode(val)
-	if isinstance(val, dbus.ByteArray):
-		return "".join([str(x) for x in val])
-	if isinstance(val, (list, tuple)):
-		return [unwrap_dbus_value(x) for x in val]
-	if isinstance(val, (dbus.Dictionary, dict)):
-		return dict([(unwrap_dbus_value(x), unwrap_dbus_value(y)) for x,y in val.items()])
-	if isinstance(val, dbus.Boolean):
-		return bool(val)
-	return val
 
 
 def get_service_type(service_name):

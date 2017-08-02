@@ -146,8 +146,9 @@ of that.
 This command will get you the total system consumption:
 
 	mosquitto_sub -v -I myclient_ -c -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
-	
-You may need the full path to the cert file. On the CCGX it is /opt/victronenergy/dbus-mqtt-py/venus-ca.crt. The certificate is also part of this repository.
+
+You may need the full path to the cert file. On the CCGX it is in
+`/etc/ssl/certs/ccgx-ca.pem`. You can also find the certificate in this repository as `venus-ca.crt`.
 
 In case you do not receive the value you expect, please read the keep-alive section.
 
