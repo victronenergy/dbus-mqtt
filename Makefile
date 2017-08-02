@@ -9,8 +9,7 @@ DEST_PAHO_MQTT_DIR = $(bindir)/paho/mqtt
 
 FILES = \
 	$(SRC_DIR)/dbus_mqtt.py \
-	$(SRC_DIR)/mqtt_gobject_bridge.py \
-	$(SRC_DIR)/mosquitto.conf
+	$(SRC_DIR)/mqtt_gobject_bridge.py
 
 PAHO_FILES = \
 	$(SRC_PAHO_DIR)/__init__.py
