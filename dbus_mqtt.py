@@ -331,7 +331,8 @@ if __name__ == '__main__':
 	logger = setup_logging(args.debug)
 
 	# This allows us to use gobject code in new threads
-	# gobject.threads_init()
+	gobject.threads_init()
+
 	mainloop = gobject.MainLoop()
 	# Have a mainloop, so we can send/receive asynchronous calls to and from dbus
 	DBusGMainLoop(set_as_default=True)
