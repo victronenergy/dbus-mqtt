@@ -164,6 +164,3 @@ Websockets
 The MQTT service on mqtt.victronenergy.com is also accessible through websockets, on webmqtt.victronenergy.com,
 port 443. This allows for using MQTT from a web browser, supporting all aforementioned behavior. Note that
 mqtt.victronenergy.com also has port 443 open, but this is not a websocket port.
-
-Should you run into HTTP 400 errors, this is because the client needs to support the base64 or binary 
-protocol. Read [this](http://stackoverflow.com/questions/15962359) for more information.
