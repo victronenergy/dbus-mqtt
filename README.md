@@ -103,9 +103,9 @@ The script will reply with this message (make sure you subscribe to it):
 	Topic: N/e0ff50a097c0/pvinverter/20/Ac/Power
 	Payload: {"value": 926}
 
-Normally you do not need to use read requests, because most values are published automatically. There are
-some exceptions however. Most important are the settings (com.victronenergy.settings on the D-Bus). If you
-want to retrieve a setting you have to use a read request.
+Normally you do not need to use read requests, because most values are published automatically as they
+change. For values that don't change often, most notably settings (com.victronenergy.settings on D-Bus),
+you will have to use a read request to retrieve the current value.
 
 Keep-alive
 ----------
