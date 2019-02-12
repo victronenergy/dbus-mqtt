@@ -10,6 +10,7 @@ import sys
 import traceback
 from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
+from collections import OrderedDict
 
 
 # Victron packages
@@ -47,6 +48,9 @@ class DbusMqtt(MqttGObjectBridge):
 		self._services = {}
 		# Key: short D-Bus service name (eg. 1:31), value: full D-Bus service name (eg. com.victronenergy.settings)
 		self._service_ids = {}
+		# A queue of value changes, so that we may rate-limit this somewhat
+		self.queue = OrderedDict()
+		gobject.idle_add(self._service_queue)
 
 		if init_broker:
 			self._registrator = MosquittoBridgeRegistrator(self._system_id)
@@ -81,7 +85,9 @@ class DbusMqtt(MqttGObjectBridge):
 		# Publish None when service disappears: the topic will no longer show up when subscribing.
 		# Clients which are already subscribed will receive a single message with empty payload.
 		payload = None if reset else json.dumps(dict(value=value))
-		self._client.publish(topic, payload, retain=True)
+
+		# Put it into the queue
+		self.queue[topic] = payload
 
 	def _publish_all(self, reset=False):
 		keys = self._values.keys()
@@ -251,6 +257,23 @@ class DbusMqtt(MqttGObjectBridge):
 		self._values[topic] = value
 		self._publish(topic, value)
 
+	def _service_queue(self):
+		for _ in xrange(5):
+			try:
+				topic, value = self.queue.popitem(last=False)
+			except KeyError:
+				gobject.timeout_add(2000, self._service_queue)
+				return False
+			else:
+				try:
+					self._client.publish(topic, value, retain=True)
+				except:
+					logging.error('[Queue] Error publishing: {} {}'.format(topic, value))
+					traceback.print_exc()
+
+		gobject.idle_add(self._service_queue)
+		return False
+
 	def _add_item(self, service, device_instance, path, value=None, publish=True, get_value=True):
 		if not path.startswith('/'):
 			path = '/' + path
@@ -263,8 +286,7 @@ class DbusMqtt(MqttGObjectBridge):
 		service_type = get_service_type(service)
 		if (service_type, path) in blocked_items:
 			return
-		topic = 'N/{}/{}/{}{}'.format(self._system_id, service_type, device_instance, path)
-		self._topics[uid] = topic
+		self._topics[uid] = topic = 'N/{}/{}/{}{}'.format(self._system_id, service_type, device_instance, path)
 		self._values[topic] = value
 		if publish:
 			self._publish(topic, value)
@@ -315,7 +337,7 @@ def get_short_service_name(service, device_instance):
 	return '{}/{}'.format(get_service_type(service), device_instance)
 
 
-if __name__ == '__main__':
+def main():
 	parser = argparse.ArgumentParser(description='Publishes values from the D-Bus to an MQTT broker')
 	parser.add_argument('-d', '--debug', help='set logging level to debug', action='store_true')
 	parser.add_argument('-q', '--mqtt-server', nargs='?', default=None, help='name of the mqtt server')
@@ -342,4 +364,10 @@ if __name__ == '__main__':
 		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
 		init_broker=args.init_broker)
 	# Start and run the mainloop
-	mainloop.run()
+	try:
+		mainloop.run()
+	except KeyboardInterrupt:
+		pass
+
+if __name__ == '__main__':
+	main()
