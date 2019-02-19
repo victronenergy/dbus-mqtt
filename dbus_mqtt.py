@@ -22,7 +22,7 @@ from mqtt_gobject_bridge import MqttGObjectBridge
 from mosquitto_bridge_registrator import MosquittoBridgeRegistrator
 
 
-SoftwareVersion = '1.10'
+SoftwareVersion = '1.11'
 ServicePrefix = 'com.victronenergy.'
 VeDbusInvalid = dbus.Array([], signature=dbus.Signature('i'), variant_level=1)
 blocked_items = {'vebus', u'/Interfaces/Mk2/Tunnel'}
