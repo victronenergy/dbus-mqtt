@@ -7,6 +7,7 @@ import gobject
 import logging
 import os
 import sys
+from time import time
 import traceback
 from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
@@ -50,7 +51,8 @@ class DbusMqtt(MqttGObjectBridge):
 		self._service_ids = {}
 		# A queue of value changes, so that we may rate-limit this somewhat
 		self.queue = OrderedDict()
-		gobject.idle_add(self._service_queue)
+		gobject.timeout_add(1000, self._timer_service_queue)
+		self._last_queue_run = 0
 
 		if init_broker:
 			self._registrator = MosquittoBridgeRegistrator(self._system_id)
@@ -146,12 +148,16 @@ class DbusMqtt(MqttGObjectBridge):
 		value = json.loads(payload)['value']
 		service, path = self._get_uid_by_topic(topic)
 		self._set_dbus_value(service, path, value)
+		# Run the queue as soon as possible
+		gobject.idle_add(self._service_queue)
 
 	def _handle_read(self, topic):
 		logging.debug('[Read] Topic {}'.format(topic))
 		self._get_uid_by_topic(topic)
 		value = self._values[topic]
 		self._publish(topic, value)
+		# Run the queue as soon as possible
+		gobject.idle_add(self._service_queue)
 
 	def _get_uid_by_topic(self, topic):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
@@ -257,12 +263,19 @@ class DbusMqtt(MqttGObjectBridge):
 		self._values[topic] = value
 		self._publish(topic, value)
 
-	def _service_queue(self):
-		for _ in xrange(5):
+	def _timer_service_queue(self):
+		if len(self.queue) > 0 and time() - self._last_queue_run > 1.5:
+			if self._service_queue():
+				# The queue is not empty
+				gobject.idle_add(self._service_queue)
+		return True
+
+	def _service_queue(self, items=5):
+		self._last_queue_run = time()
+		for _ in xrange(items):
 			try:
 				topic, value = self.queue.popitem(last=False)
 			except KeyError:
-				gobject.timeout_add(2000, self._service_queue)
 				return False
 			else:
 				try:
@@ -271,8 +284,7 @@ class DbusMqtt(MqttGObjectBridge):
 					logging.error('[Queue] Error publishing: {} {}'.format(topic, value))
 					traceback.print_exc()
 
-		gobject.idle_add(self._service_queue)
-		return False
+		return True
 
 	def _add_item(self, service, device_instance, path, value=None, publish=True, get_value=True):
 		if not path.startswith('/'):
