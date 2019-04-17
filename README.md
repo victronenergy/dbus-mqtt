@@ -118,6 +118,11 @@ So to keep the notifications running, you'll have to send a read request regular
 	Topic: R/e0ff50a097c0/system/0/Serial
 	Payload: empty
 
+An easy way to send a periodic keep-alive message without having to do it manually is to run this command
+in a separate session and/or terminal window:
+
+    while :; do mosquitto_pub  -m '' -t 'R/e0ff50a097c0/system/0/Serial'; sleep 5; done
+
 On a keep-alive timeout (at the end of the 60 second interval), all retained values will be removed from the
 broker (by publishing an empty payload), so subscriptions will yield no result when the keep-alive is not 
 active.
@@ -146,6 +151,8 @@ of that.
 This command will get you the total system consumption:
 
 	mosquitto_sub -v -I myclient_ -c -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
+
+If you want to see all the MQTT traffic, subscribe to the topic '#'.
 
 You may need the full path to the cert file. On the CCGX it is in
 `/etc/ssl/certs/ccgx-ca.pem`. You can also find the certificate in this repository as `venus-ca.crt`.
