@@ -1,11 +1,14 @@
 dbus-mqtt
 =========
 
-A python script that publishes values from the D-Bus to an MQTT broker. The script also supports requests
-from the MQTT broker to change values on the local D-Bus. This script only works with the D-Bus interface
-defined for use with the Color Control GX (CCGX).
+A python application that publishes values from the D-Bus to an MQTT broker. The script also supports requests
+from the MQTT broker to change values on the local D-Bus.
 
-By default, dbus-mqtt will connect to a Mosquitto MQTT broker running on the CCGX itself. The broker is
+This application runs as a service on [Venus OS](https://github.com/victronenergy/venus/wiki). By default it is disabled. To enable,
+go to Settings -> Services -> MQTT on the menus of the GX device.
+
+
+By default, dbus-mqtt will connect to a Mosquitto MQTT broker running on the GX Device itself. The broker is
 accessible on the local network at TCP port 1883. Furthermore the broker is configured to forward all
 communication to the central Victron MQTT broker (mqtt.victronenergy.com), which allows you to monitor and
 control your CCGX over the internet. You'll need your VRM credentials to access this broker. See 'Connecting
