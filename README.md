@@ -10,7 +10,7 @@ go to Settings -> Services -> MQTT on the menus of the GX device.
 
 By default, dbus-mqtt will connect to a Mosquitto MQTT broker running on the GX Device itself. The broker is
 accessible on the local network at TCP port 1883. Furthermore the broker is configured to forward all
-communication to the central Victron MQTT broker (mqtt.victronenergy.com), which allows you to monitor and
+communication to the central Victron MQTT broker (see the broker URL section for the Victron MQTT broker URL), which allows you to monitor and
 control your CCGX over the internet. You'll need your VRM credentials to access this broker. See 'Connecting
 to the Victron MQTT server' below.
 
@@ -136,7 +136,7 @@ Connecting to the Victron MQTT server
 -------------------------------------
 
 If the MQTT service is enabled, the CCGX will forward all notifications from the CCGX to the Victron MQTT
-server (mqtt.victronenergy.com). All communication is encrypted using SSL. You can connect to the MQTT
+server (see the broker URL section for the correct URL). All communication is encrypted using SSL. You can connect to the MQTT
 server using your VRM credentials and subscribe to the notifications sent by your CCGX. It is also possible
 to send read and write requests to the CCGX. You can only receive notifications from systems in your own VRM
 site list, and to send write requests you need the 'Full Control' permission. This is the default is you have
@@ -153,7 +153,7 @@ of that.
 
 This command will get you the total system consumption:
 
-	mosquitto_sub -v -I myclient_ -c -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
+	mosquitto_sub -v -I myclient_ -c -t 'N/e0ff50a097c0/system/0/Ac/Consumption/Total/Power' -h <broker_url> -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 
 If you want to see all the MQTT traffic, subscribe to the topic '#'.
 
@@ -164,13 +164,23 @@ In case you do not receive the value you expect, please read the keep-alive sect
 
 If you have Full Control permissions on the VRM site, write requests will also be processed. For example:
 
-	mosquitto_pub -I myclient_ -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h mqtt.victronenergy.com -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
+	mosquitto_pub -I myclient_ -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h <broker_url> -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 
 Again: do not set the retain flag when sending write requests.
 
-Websockets
-----------
-
-The MQTT service on mqtt.victronenergy.com is also accessible through websockets, on webmqtt.victronenergy.com,
-port 443. This allows for using MQTT from a web browser, supporting all aforementioned behavior. Note that
-mqtt.victronenergy.com also has port 443 open, but this is not a websocket port.
+Determining the broker URL for a given installation
+---------------------------------------------------
+To allow broker scaling, each installation connects to one of the 128 available broker URLs.
+To determine the URL of the broker:
+- the `ord()` value of each charachter of the VRM portal ID should be summed.
+- the modulo of the sum and 128 determines the broker index number
+- the broker URL then is: `mqtt<broker_index>.victronenergy.com`, e.g.: `mqtt101.victronenergy.com`
+An example implementation of this algorithm in python is:
+```python
+def _get_vrm_broker_url(self):
+    sum = 0
+    for character in self._system_id.lower().strip():
+        sum += ord(character)
+    broker_index = sum % 128
+    return "mqtt{}.victronenergy.com".format(broker_index)
+```
