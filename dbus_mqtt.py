@@ -9,6 +9,7 @@ import os
 import sys
 from time import time
 import traceback
+import signal
 from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
 from collections import OrderedDict
@@ -349,6 +350,13 @@ def get_short_service_name(service, device_instance):
 	return '{}/{}'.format(get_service_type(service), device_instance)
 
 
+def dumpstacks(signal, frame):
+	import threading
+	id2name = dict((t.ident, t.name) for t in threading.enumerate())
+	for tid, stack in sys._current_frames().items():
+		logging.info ("=== {} ===".format(id2name[tid]))
+		traceback.print_stack(f=stack)
+
 def main():
 	parser = argparse.ArgumentParser(description='Publishes values from the D-Bus to an MQTT broker')
 	parser.add_argument('-d', '--debug', help='set logging level to debug', action='store_true')
@@ -375,6 +383,10 @@ def main():
 		mqtt_server=args.mqtt_server, ca_cert=args.mqtt_certificate, user=args.mqtt_user,
 		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
 		init_broker=args.init_broker)
+
+	# Handle SIGUSR1 and dump a stack trace
+	signal.signal(signal.SIGUSR1, dumpstacks)
+
 	# Start and run the mainloop
 	try:
 		mainloop.run()
