@@ -32,7 +32,7 @@ blocked_items = {'vebus', u'/Interfaces/Mk2/Tunnel'}
 
 class DbusMqtt(MqttGObjectBridge):
 	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None, dbus_address=None,
-				keep_alive_interval=None, init_broker=False):
+				keep_alive_interval=None, init_broker=False, publish_interval=1):
 		self._dbus_address = dbus_address
 		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
 			if dbus_address is None \
@@ -50,9 +50,9 @@ class DbusMqtt(MqttGObjectBridge):
 		self._services = {}
 		# Key: short D-Bus service name (eg. 1:31), value: full D-Bus service name (eg. com.victronenergy.settings)
 		self._service_ids = {}
-		# A queue of value changes, so that we may rate-limit this somewhat
+		# A queue of value changes, rate limited by default to 1s.
 		self.queue = OrderedDict()
-		gobject.timeout_add(1000, self._timer_service_queue)
+		gobject.timeout_add(publish_interval * 1000, self._timer_service_queue)
 		self._last_queue_run = 0
 
 		if init_broker:
@@ -367,6 +367,7 @@ def main():
 	parser.add_argument('-b', '--dbus', default=None, help='dbus address')
 	parser.add_argument('-k', '--keep-alive', default=60, help='keep alive interval in seconds', type=int)
 	parser.add_argument('-i', '--init-broker', action='store_true', help='Tries to setup communication with VRM MQTT broker')
+    parser.add_argument('-p', '--publish-interval', default='1', help='Time interval between MQTT publishes in seconds.')
 	args = parser.parse_args()
 
 	print("-------- dbus_mqtt, v{} is starting up --------".format(SoftwareVersion))
@@ -382,7 +383,7 @@ def main():
 	handler = DbusMqtt(
 		mqtt_server=args.mqtt_server, ca_cert=args.mqtt_certificate, user=args.mqtt_user,
 		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
-		init_broker=args.init_broker)
+		init_broker=args.init_broker, publish_interval=args.publish_interval)
 
 	# Handle SIGUSR1 and dump a stack trace
 	signal.signal(signal.SIGUSR1, dumpstacks)
