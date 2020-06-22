@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import errno
-import gobject
 import logging
 import os
 import paho.mqtt.client
@@ -9,6 +8,7 @@ import socket
 import ssl
 import sys
 import traceback
+from gi.repository import GLib
 
 
 AppDir = os.path.dirname(os.path.realpath(__file__))
@@ -31,7 +31,7 @@ class MqttGObjectBridge(object):
 		self._socket_watch = None
 		self._socket_timer = None
 		if self._init_mqtt():
-			gobject.timeout_add_seconds(5, exit_on_error, self._init_mqtt)
+			GLib.timeout_add_seconds(5, exit_on_error, self._init_mqtt)
 
 	def _init_mqtt(self):
 		try:
@@ -45,18 +45,18 @@ class MqttGObjectBridge(object):
 				self._client.connect(self._mqtt_server, 8883, 60)
 			self._init_socket_handlers()
 			return False
-		except socket.error, e:
+		except socket.error as e:
 			if e.errno == errno.ECONNREFUSED:
 				return True
 			raise
 
 	def _init_socket_handlers(self):
 		if self._socket_watch is not None:
-			gobject.source_remove(self._socket_watch)
-		self._socket_watch = gobject.io_add_watch(self._client.socket().fileno(), gobject.IO_IN,
+			GLib.source_remove(self._socket_watch)
+		self._socket_watch = GLib.io_add_watch(self._client.socket().fileno(), GLib.IO_IN,
 			self._on_socket_in)
 		if self._socket_timer is None:
-			self._socket_timer = gobject.timeout_add_seconds(1, exit_on_error, self._on_socket_timer)
+			self._socket_timer = GLib.timeout_add_seconds(1, exit_on_error, self._on_socket_timer)
 
 	def _on_log(self, client, userdata, level, log):
 		print(log)
@@ -81,10 +81,10 @@ class MqttGObjectBridge(object):
 	def _on_disconnect(self, client, userdata, rc):
 		logging.error('[Disconnected] Lost connection to broker')
 		if self._socket_watch is not None:
-			gobject.source_remove(self._socket_watch)
+			GLib.source_remove(self._socket_watch)
 			self._socket_watch = None
 		logging.info('[Disconnected] Set timer')
-		gobject.timeout_add(5000, exit_on_error, self._reconnect)
+		GLib.timeout_add(5000, exit_on_error, self._reconnect)
 
 	def _reconnect(self):
 		try:
@@ -93,7 +93,7 @@ class MqttGObjectBridge(object):
 			self._init_socket_handlers()
 			logging.info('[Reconnect] success')
 			return False
-		except socket.error, e:
+		except socket.error as e:
 			logging.error('[Reconnect] failed' + traceback.format_exc())
 			if e.errno == errno.ECONNREFUSED:
 				return True

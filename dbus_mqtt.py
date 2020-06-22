@@ -1,18 +1,19 @@
-#!/usr/bin/python -u
+#!/usr/bin/python3 -u
 # -*- coding: utf-8 -*-
 import argparse
 import dbus
 import json
-import gobject
 import logging
 import os
 import sys
 from time import time
 import traceback
 import signal
+import six
 from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
 from collections import OrderedDict
+from gi.repository import GLib
 
 
 # Victron packages
@@ -52,7 +53,7 @@ class DbusMqtt(MqttGObjectBridge):
 		self._service_ids = {}
 		# A queue of value changes, so that we may rate-limit this somewhat
 		self.queue = OrderedDict()
-		gobject.timeout_add(1000, self._timer_service_queue)
+		GLib.timeout_add(1000, self._timer_service_queue)
 		self._last_queue_run = 0
 
 		if init_broker:
@@ -93,9 +94,7 @@ class DbusMqtt(MqttGObjectBridge):
 		self.queue[topic] = payload
 
 	def _publish_all(self, reset=False):
-		keys = self._values.keys()
-		keys.sort()
-		for topic in keys:
+		for topic in sorted(self._values.keys()):
 			value = self._values[topic]
 			self._publish(topic, value, reset=reset)
 
@@ -150,7 +149,7 @@ class DbusMqtt(MqttGObjectBridge):
 		service, path = self._get_uid_by_topic(topic)
 		self._set_dbus_value(service, path, value)
 		# Run the queue as soon as possible
-		gobject.idle_add(self._service_queue)
+		GLib.idle_add(self._service_queue)
 
 	def _handle_read(self, topic):
 		logging.debug('[Read] Topic {}'.format(topic))
@@ -158,7 +157,7 @@ class DbusMqtt(MqttGObjectBridge):
 		value = self._values[topic]
 		self._publish(topic, value)
 		# Run the queue as soon as possible
-		gobject.idle_add(self._service_queue)
+		GLib.idle_add(self._service_queue)
 
 	def _get_uid_by_topic(self, topic):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
@@ -177,7 +176,7 @@ class DbusMqtt(MqttGObjectBridge):
 			self._service_ids[newowner] = name
 		elif oldowner != '':
 			logging.info('[OwnerChange] Service disappeared: {}'.format(name))
-			for path, topic in self._topics.items():
+			for path, topic in list(self._topics.items()):
 				if path.startswith(name + '/'):
 					self._publish(topic, None, reset=True)
 					del self._topics[path]
@@ -215,7 +214,7 @@ class DbusMqtt(MqttGObjectBridge):
 			if isinstance(items, dict):
 				for path, value in items.items():
 					self._add_item(service, device_instance, path, value=unwrap_dbus_value(value), publish=publish, get_value=False)
-		except dbus.exceptions.DBusException, e:
+		except dbus.exceptions.DBusException as e:
 			if e.get_dbus_name() == 'org.freedesktop.DBus.Error.ServiceUnknown' or \
 				e.get_dbus_name() == 'org.freedesktop.DBus.Error.Disconnected':
 				logging.info("[Scanning] Service disappeared while being scanned: %s", service)
@@ -269,12 +268,12 @@ class DbusMqtt(MqttGObjectBridge):
 		if len(self.queue) > 0 and time() - self._last_queue_run > 1.5:
 			if self._service_queue():
 				# The queue is not empty
-				gobject.idle_add(self._service_queue)
+				GLib.idle_add(self._service_queue)
 		return True
 
 	def _service_queue(self, items=5):
 		self._last_queue_run = time()
-		for _ in xrange(items):
+		for _ in six.moves.range(items):
 			try:
 				topic, value = self.queue.popitem(last=False)
 			except KeyError:
@@ -326,8 +325,8 @@ class DbusMqtt(MqttGObjectBridge):
 			logging.info('[KeepAlive] Received request, publishing restarted')
 			restart = True
 		else:
-			gobject.source_remove(self._keep_alive_timer)
-		self._keep_alive_timer = gobject.timeout_add_seconds(
+			GLib.source_remove(self._keep_alive_timer)
+		self._keep_alive_timer = GLib.timeout_add_seconds(
 			self._keep_alive_interval, exit_on_error, self._on_keep_alive_timeout)
 		if restart:
 			# Do this after self._keep_alive_timer is set, because self._publish used it check if it should
@@ -378,10 +377,7 @@ def main():
 	print("-------- dbus_mqtt, v{} is starting up --------".format(SoftwareVersion))
 	logger = setup_logging(args.debug)
 
-	# This allows us to use gobject code in new threads
-	gobject.threads_init()
-
-	mainloop = gobject.MainLoop()
+	mainloop = GLib.MainLoop()
 	# Have a mainloop, so we can send/receive asynchronous calls to and from dbus
 	DBusGMainLoop(set_as_default=True)
 	keep_alive_interval = args.keep_alive if args.keep_alive > 0 else None
