@@ -17,7 +17,7 @@ from ve_utils import exit_on_error
 
 
 class MqttGObjectBridge(object):
-	def __init__(self, mqtt_server=None, client_id="", ca_cert=None, user=None, passwd=None):
+	def __init__(self, mqtt_server=None, client_id="", ca_cert=None, user=None, passwd=None, debug=False):
 		self._ca_cert = ca_cert
 		self._mqtt_user = user
 		self._mqtt_passwd = passwd
@@ -26,6 +26,8 @@ class MqttGObjectBridge(object):
 		self._client.on_connect = self._on_connect
 		self._client.on_message = self._on_message
 		self._client.on_disconnect = self._on_disconnect
+		if debug:
+			self._client.on_log = self._on_log
 		self._socket_watch = None
 		self._socket_timer = None
 		if self._init_mqtt():
@@ -55,6 +57,9 @@ class MqttGObjectBridge(object):
 			self._on_socket_in)
 		if self._socket_timer is None:
 			self._socket_timer = gobject.timeout_add_seconds(1, exit_on_error, self._on_socket_timer)
+
+	def _on_log(self, client, userdata, level, log):
+		print(log)
 
 	def _on_socket_in(self, src, condition):
 		exit_on_error(self._client.loop_read)

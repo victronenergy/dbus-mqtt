@@ -32,7 +32,7 @@ blocked_items = {'vebus', u'/Interfaces/Mk2/Tunnel'}
 
 class DbusMqtt(MqttGObjectBridge):
 	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None, dbus_address=None,
-				keep_alive_interval=None, init_broker=False):
+				keep_alive_interval=None, init_broker=False, debug=False):
 		self._dbus_address = dbus_address
 		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
 			if dbus_address is None \
@@ -74,7 +74,7 @@ class DbusMqtt(MqttGObjectBridge):
 		self._keep_alive_interval = keep_alive_interval
 		self._keep_alive_timer = None
 
-		MqttGObjectBridge.__init__(self, mqtt_server, "ve-dbus-mqtt-py", ca_cert, user, passwd)
+		MqttGObjectBridge.__init__(self, mqtt_server, "ve-dbus-mqtt-py", ca_cert, user, passwd, debug)
 
 	def _publish(self, topic, value, reset=False):
 		if self._socket_watch is None:
@@ -387,7 +387,7 @@ def main():
 	handler = DbusMqtt(
 		mqtt_server=args.mqtt_server, ca_cert=args.mqtt_certificate, user=args.mqtt_user,
 		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
-		init_broker=args.init_broker)
+		init_broker=args.init_broker, debug=args.debug)
 
 	# Handle SIGUSR1 and dump a stack trace
 	signal.signal(signal.SIGUSR1, dumpstacks)
