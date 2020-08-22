@@ -357,7 +357,12 @@ def dumpstacks(signal, frame):
 		logging.info ("=== {} ===".format(id2name[tid]))
 		traceback.print_stack(f=stack)
 
+def exit(signal, frame):
+	sys.exit(0)
+
 def main():
+	signal.signal(signal.SIGINT, exit)
+
 	parser = argparse.ArgumentParser(description='Publishes values from the D-Bus to an MQTT broker')
 	parser.add_argument('-d', '--debug', help='set logging level to debug', action='store_true')
 	parser.add_argument('-q', '--mqtt-server', nargs='?', default=None, help='name of the mqtt server')
