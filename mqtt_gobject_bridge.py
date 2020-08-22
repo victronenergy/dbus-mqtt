@@ -68,7 +68,8 @@ class MqttGObjectBridge(object):
 	def _on_socket_timer(self):
 		self._client.loop_misc()
 		while self._client.want_write():
-			self._client.loop_write(10)
+			if self._client.loop_write(10) != paho.mqtt.client.MQTT_ERR_SUCCESS:
+				break
 		return True
 
 	def _on_connect(self, client, userdata, dict, rc):
