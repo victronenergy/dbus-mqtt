@@ -212,8 +212,9 @@ class DbusMqtt(MqttGObjectBridge):
 					return
 				else:
 					raise
-			for path, value in items.items():
-				self._add_item(service, device_instance, path, value=unwrap_dbus_value(value), publish=publish, get_value=False)
+			if isinstance(items, dict):
+				for path, value in items.items():
+					self._add_item(service, device_instance, path, value=unwrap_dbus_value(value), publish=publish, get_value=False)
 		except dbus.exceptions.DBusException, e:
 			if e.get_dbus_name() == 'org.freedesktop.DBus.Error.ServiceUnknown' or \
 				e.get_dbus_name() == 'org.freedesktop.DBus.Error.Disconnected':
