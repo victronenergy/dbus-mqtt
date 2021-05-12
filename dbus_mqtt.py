@@ -138,6 +138,7 @@ class DbusMqtt(MqttGObjectBridge):
 		except:
 			logging.error('[Request] Error in request: {} {}'.format(msg.topic, msg.payload))
 			traceback.print_exc()
+
 		# Make sure we refresh keep-alive even if the handle read/write failed. The client may request a
 		# value that is temporarily unavailable.
 		if refresh_keep_valid:
@@ -326,8 +327,10 @@ class DbusMqtt(MqttGObjectBridge):
 			restart = True
 		else:
 			GLib.source_remove(self._keep_alive_timer)
+
 		self._keep_alive_timer = GLib.timeout_add_seconds(
 			self._keep_alive_interval, exit_on_error, self._on_keep_alive_timeout)
+
 		if restart:
 			# Do this after self._keep_alive_timer is set, because self._publish used it check if it should
 			# publish
