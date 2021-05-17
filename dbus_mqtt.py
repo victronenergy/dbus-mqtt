@@ -33,7 +33,7 @@ blocked_items = {('vebus', u'/Interfaces/Mk2/Tunnel'), ('paygo', '/LVD/Threshold
 
 class DbusMqtt(MqttGObjectBridge):
 	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None, dbus_address=None,
-				keep_alive_interval=None, init_broker=False, debug=False):
+				init_broker=False, debug=False):
 		self._dbus_address = dbus_address
 		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
 			if dbus_address is None \
@@ -71,20 +71,11 @@ class DbusMqtt(MqttGObjectBridge):
 				self._service_ids[self._dbus_conn.get_name_owner(service)] = service
 				self._scan_dbus_service(service)
 
-		# Bus scan may take a log time, so start keep alive after scan
-		self._keep_alive_interval = keep_alive_interval
-		self._keep_alive_timer = None
-
 		MqttGObjectBridge.__init__(self, mqtt_server, "ve-dbus-mqtt-py", ca_cert, user, passwd, debug)
 
 	def _publish(self, topic, value):
 		if self._socket_watch is None:
 			return
-
-		if self._keep_alive_interval is not None and self._keep_alive_timer is None:
-			# Keep alive enabled, but timer ran out, so no publishes except for system serial
-			if not topic.endswith('/system/0/Serial'):
-				return
 
 		# Put it into the queue
 		self.queue[topic] = json.dumps(dict(value=value))
@@ -95,10 +86,6 @@ class DbusMqtt(MqttGObjectBridge):
 
 		# Never unpublish system serial
 		if topic.endswith('/system/0/Serial'):
-			return
-
-		if self._keep_alive_interval is not None and self._keep_alive_timer is None:
-			# Keep alive enabled, but timer ran out
 			return
 
 		# Put it into the queue
@@ -138,13 +125,11 @@ class DbusMqtt(MqttGObjectBridge):
 				self._connected_to_cloud = False
 				self._registrator.register()
 			return
-		refresh_keep_valid = False
 		try:
 			logging.debug('[Request] {}: {}'.format(msg.topic, str(msg.payload)))
 			action, system_id, path = msg.topic.split('/', 2)
 			if system_id != self._system_id:
 				raise Exception('Unknown system id')
-			refresh_keep_valid = True
 			topic = 'N/{}/{}'.format(system_id, path)
 			if action == 'W':
 				self._handle_write(topic, msg.payload)
@@ -153,11 +138,6 @@ class DbusMqtt(MqttGObjectBridge):
 		except:
 			logging.error('[Request] Error in request: {} {}'.format(msg.topic, msg.payload))
 			traceback.print_exc()
-
-		# Make sure we refresh keep-alive even if the handle read/write failed. The client may request a
-		# value that is temporarily unavailable.
-		if refresh_keep_valid:
-			self._refresh_keep_alive()
 
 	def _handle_write(self, topic, payload):
 		logging.debug('[Write] Writing {} to {}'.format(payload, topic))
@@ -345,30 +325,6 @@ class DbusMqtt(MqttGObjectBridge):
 		value = wrap_dbus_value(value)
 		return self._dbus_conn.call_blocking(service, path, None, 'SetValue', 'v', [value])
 
-	def _on_keep_alive_timeout(self):
-		logging.info('[KeepAlive] Timer trigger, changes are no longer published')
-		self._unpublish_all()
-		self._keep_alive_timer = None
-
-	def _refresh_keep_alive(self):
-		if self._keep_alive_interval is None:
-			return
-		restart = False
-		if self._keep_alive_timer is None:
-			logging.info('[KeepAlive] Received request, publishing restarted')
-			restart = True
-		else:
-			GLib.source_remove(self._keep_alive_timer)
-
-		self._keep_alive_timer = GLib.timeout_add_seconds(
-			self._keep_alive_interval, exit_on_error, self._on_keep_alive_timeout)
-
-		if restart:
-			# Do this after self._keep_alive_timer is set, because self._publish used it check if it should
-			# publish
-			self._publish_all()
-
-
 def get_service_type(service_name):
 	if not service_name.startswith(ServicePrefix):
 		raise Exception('No victron service')
@@ -415,10 +371,9 @@ def main():
 	mainloop = GLib.MainLoop()
 	# Have a mainloop, so we can send/receive asynchronous calls to and from dbus
 	DBusGMainLoop(set_as_default=True)
-	keep_alive_interval = args.keep_alive if args.keep_alive > 0 else None
 	handler = DbusMqtt(
 		mqtt_server=args.mqtt_server, ca_cert=args.mqtt_certificate, user=args.mqtt_user,
-		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
+		passwd=args.mqtt_password, dbus_address=args.dbus,
 		init_broker=args.init_broker, debug=args.debug)
 
 	# Handle SIGUSR1 and dump a stack trace
