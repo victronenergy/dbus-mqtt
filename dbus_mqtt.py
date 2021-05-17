@@ -15,6 +15,7 @@ from lxml import etree
 from collections import OrderedDict
 from gi.repository import GLib
 
+from itertools import zip_longest
 
 # Victron packages
 AppDir = os.path.dirname(os.path.realpath(__file__))
@@ -30,6 +31,108 @@ ServicePrefix = 'com.victronenergy.'
 VeDbusInvalid = dbus.Array([], signature=dbus.Signature('i'), variant_level=1)
 blocked_items = {('vebus', u'/Interfaces/Mk2/Tunnel'), ('paygo', '/LVD/Threshold')}
 
+MAX_TOPIC_AGE = 60
+
+class BaseTopic(object):
+	__slots__ = ('topic','timestamp', 'maxage')
+
+	def __init__(self, maxage):
+		self.timestamp = int(time())
+		self.maxage = maxage
+
+class WildcardTopic(BaseTopic):
+	def __init__(self):
+		super(WildcardTopic, self).__init__(MAX_TOPIC_AGE)
+		self.topic = None
+
+	def match(self, topic):
+		return True
+
+	def __eq__(self, other):
+		return isinstance(other, WildcardTopic)
+
+	def __hash__(self):
+		return hash(None)
+
+# payload example:
+# ["system/#","inverter/+/voltage"]
+# filter string can end in a # (test with "endswith"), or contain a `+`.
+class Topic(BaseTopic):
+	def __init__(self, t, maxage):
+		super(Topic, self).__init__(maxage)
+		self.topic = t.split('/')
+
+	def match(self, topic):
+		for x, y in zip_longest(self.topic, topic.split('/')):
+			if None in (x, y):
+				return False
+			if '+' in (x, y):
+				continue
+			if '#' in (x, y):
+				return True
+			if x == y:
+				continue
+			return False
+		return True
+
+	def __eq__(self, other):
+		return self.topic == other.topic
+
+	def __hash__(self):
+		return hash('/'.join(self.topic))
+
+class Subscriptions(object):
+	def __init__(self):
+		self.topics = []
+
+	def subscribe_all(self):
+		w = WildcardTopic()
+		try:
+			self.topics.remove(w)
+		except ValueError:
+			pass
+
+		# Put it first in the list for performance reasons
+		self.topics.insert(0, w)
+
+	def subscribe(self, topic, ttl=MAX_TOPIC_AGE):
+		t = Topic(topic, ttl)
+		# Removing and re-adding updates timestamp and potentially also ttl
+		try:
+			self.topics.remove(t)
+		except ValueError:
+			pass
+		self.topics.append(t)
+
+	def match(self, t):
+		return any(topic.match(t) for topic in self.topics)
+
+	def cleanup(self, published):
+		""" Remove expired topics from subscriptions. Return topics that
+		    should be unpublished. """
+		affected_topics = set()
+		now = int(time())
+		for r in [t for t in self.topics if max(0, now - t.timestamp) > t.maxage]:
+			# Expire the topic
+			self.topics.remove(r)
+
+		if any(isinstance(t, WildcardTopic) for t in self.topics):
+			# No need to traverse everything, they will all match
+			return ()
+
+		# Find topics that should no longer be published
+		return list(filter(lambda t: not self.match(t.shorttopic), published))
+
+# Keep track of full and short topic
+class PublishedTopic(object):
+	__slots__ = ('fulltopic', 'shorttopic')
+	def __init__(self, fulltopic, shorttopic=None):
+		self.fulltopic = fulltopic
+		self.shorttopic = shorttopic
+	def __eq__(self, other):
+		return isinstance(other, PublishedTopic) and self.fulltopic == other.fulltopic
+	def __hash__(self):
+		return hash(self.fulltopic)
 
 class DbusMqtt(MqttGObjectBridge):
 	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None, dbus_address=None,
@@ -51,9 +154,13 @@ class DbusMqtt(MqttGObjectBridge):
 		self._services = {}
 		# Key: short D-Bus service name (eg. 1:31), value: full D-Bus service name (eg. com.victronenergy.settings)
 		self._service_ids = {}
+		# Track subscriptions.
+		self._subscriptions = Subscriptions()
+		self._published = set()
 		# A queue of value changes, so that we may rate-limit this somewhat
 		self.queue = OrderedDict()
 		GLib.timeout_add(1000, self._timer_service_queue)
+		GLib.timeout_add(10000, self._expire_stale_topics)
 		self._last_queue_run = 0
 
 		if init_broker:
@@ -73,6 +180,16 @@ class DbusMqtt(MqttGObjectBridge):
 
 		MqttGObjectBridge.__init__(self, mqtt_server, "ve-dbus-mqtt-py", ca_cert, user, passwd, debug)
 
+	def publish(self, topic, value):
+		""" Publish to mqtt IF keepalive permits. Publish only topics that are currently alive. """
+		if topic.endswith('/system/0/Serial'):
+			self._publish(topic, value)
+		else:
+			_topic = topic.split('/', 2)[2]
+			if self._subscriptions.match(_topic):
+				self._published.add(PublishedTopic(topic, _topic))
+				self._publish(topic, value)
+
 	def _publish(self, topic, value):
 		if self._socket_watch is None:
 			return
@@ -84,21 +201,21 @@ class DbusMqtt(MqttGObjectBridge):
 		if self._socket_watch is None:
 			return
 
-		# Never unpublish system serial
-		if topic.endswith('/system/0/Serial'):
-			return
-
 		# Put it into the queue
+		self._published.discard(PublishedTopic(topic))
 		self.queue[topic] = None
 
 	def _publish_all(self):
 		for topic in sorted(self._values.keys()):
-			value = self._values[topic]
-			self._publish(topic, value)
+			self.publish(topic, self._values[topic])
 
-	def _unpublish_all(self):
-		for topic in self._values.iterkeys():
-			self._unpublish(topic)
+	def _expire_stale_topics(self):
+		try:
+			for pt in self._subscriptions.cleanup(self._published):
+				logging.debug("Expiring topic %s", pt.shorttopic)
+				self._unpublish(pt.fulltopic)
+		finally:
+			return True
 
 	def _on_connect(self, client, userdata, dict, rc):
 		MqttGObjectBridge._on_connect(self, client, userdata, dict, rc)
@@ -134,10 +251,41 @@ class DbusMqtt(MqttGObjectBridge):
 			if action == 'W':
 				self._handle_write(topic, msg.payload)
 			elif action == 'R':
-				self._handle_read(topic)
+				if path == 'system/0/Serial':
+					self._handle_serial_read(topic, msg.payload)
+				elif path == 'keepalive':
+					self._handle_keepalive(msg.payload)
+				else:
+					self._handle_read(topic)
 		except:
 			logging.error('[Request] Error in request: {} {}'.format(msg.topic, msg.payload))
 			traceback.print_exc()
+
+	def _handle_serial_read(self, topic, payload):
+		""" Currently a request for /Serial is considered a subscription for
+		    backwards compatibility. """
+		if payload:
+			topics = json.loads(payload)
+			for topic in topics:
+				self._subscriptions.subscribe(topic)
+		else:
+			self._subscriptions.subscribe_all()
+
+		self._publish(topic, self._system_id)
+		self._publish_all()
+
+	def _handle_keepalive(self, payload):
+		if payload:
+			topics = json.loads(payload)
+			for topic in topics:
+				self._subscriptions.subscribe(topic)
+		else:
+			self._subscriptions.subscribe_all()
+		self._publish_all()
+
+		# TODO send this on connection
+		# Indicate that the new keepalive mechanism is supported
+		#self._publish('N/{}/keepalive'.format(self._system_id), 1)
 
 	def _handle_write(self, topic, payload):
 		logging.debug('[Write] Writing {} to {}'.format(payload, topic))
@@ -162,10 +310,7 @@ class DbusMqtt(MqttGObjectBridge):
 		# but can nevertheless be read.
 		value = self._get_dbus_value(service, '/' + path)
 		if self._add_item(service, device_instance, path, value=value) == topic:
-			self._publish(topic, value)
-
-			# Run the queue as soon as possible
-			GLib.idle_add(self._service_queue)
+			self._client.publish(topic, json.dumps(dict(value=value)), retain=False)
 
 	def _get_uid_by_topic(self, topic):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
@@ -183,7 +328,9 @@ class DbusMqtt(MqttGObjectBridge):
 			logging.info('[OwnerChange] Service disappeared: {}'.format(name))
 			for path, topic in list(self._topics.items()):
 				if path.startswith(name + '/'):
-					self._unpublish(topic)
+					# Leave the serial number alone
+					if not topic.endswith('/system/0/Serial'):
+						self._unpublish(topic)
 					del self._topics[path]
 					del self._values[topic]
 			if name in self._services:
@@ -222,7 +369,7 @@ class DbusMqtt(MqttGObjectBridge):
 					v = unwrap_dbus_value(value)
 					topic = self._add_item(service, device_instance, path, value=v)
 					if publish and topic is not None:
-						self._publish(topic, v)
+						self.publish(topic, v)
 
 		except dbus.exceptions.DBusException as e:
 			if e.get_dbus_name() == 'org.freedesktop.DBus.Error.ServiceUnknown' or \
@@ -243,7 +390,7 @@ class DbusMqtt(MqttGObjectBridge):
 					v = self._get_dbus_value(service, path)
 					topic = self._add_item(service, device_instance, path, value=v)
 					if publish and topic is not None:
-						self._publish(topic, v)
+						self.publish(topic, v)
 		else:
 			for child in nodes:
 				name = child.attrib.get('name')
@@ -275,7 +422,7 @@ class DbusMqtt(MqttGObjectBridge):
 			return
 		value = unwrap_dbus_value(value)
 		self._values[topic] = value
-		self._publish(topic, value)
+		self.publish(topic, value)
 
 	def _timer_service_queue(self):
 		if len(self.queue) > 0 and time() - self._last_queue_run > 1.5:
