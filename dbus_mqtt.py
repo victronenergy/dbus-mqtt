@@ -41,8 +41,8 @@ class BaseTopic(object):
 		self.maxage = maxage
 
 class WildcardTopic(BaseTopic):
-	def __init__(self):
-		super(WildcardTopic, self).__init__(MAX_TOPIC_AGE)
+	def __init__(self, maxage):
+		super(WildcardTopic, self).__init__(maxage)
 		self.topic = None
 
 	def match(self, topic):
@@ -85,8 +85,8 @@ class Subscriptions(object):
 	def __init__(self):
 		self.topics = []
 
-	def subscribe_all(self):
-		w = WildcardTopic()
+	def subscribe_all(self, ttl=MAX_TOPIC_AGE):
+		w = WildcardTopic(ttl)
 		try:
 			self.topics.remove(w)
 		except ValueError:
@@ -136,7 +136,7 @@ class PublishedTopic(object):
 
 class DbusMqtt(MqttGObjectBridge):
 	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None, dbus_address=None,
-				init_broker=False, debug=False):
+				keep_alive_interval=None, init_broker=False, debug=False):
 		self._dbus_address = dbus_address
 		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
 			if dbus_address is None \
@@ -178,6 +178,7 @@ class DbusMqtt(MqttGObjectBridge):
 				self._service_ids[self._dbus_conn.get_name_owner(service)] = service
 				self._scan_dbus_service(service)
 
+		self._keep_alive_interval = keep_alive_interval
 		MqttGObjectBridge.__init__(self, mqtt_server, "ve-dbus-mqtt-py", ca_cert, user, passwd, debug)
 
 	def publish(self, topic, value):
@@ -267,9 +268,9 @@ class DbusMqtt(MqttGObjectBridge):
 		if payload:
 			topics = json.loads(payload)
 			for topic in topics:
-				self._subscriptions.subscribe(topic)
+				self._subscriptions.subscribe(topic, self._keep_alive_interval)
 		else:
-			self._subscriptions.subscribe_all()
+			self._subscriptions.subscribe_all(self._keep_alive_interval)
 
 		self._publish(topic, self._system_id)
 		self._publish_all()
@@ -278,9 +279,9 @@ class DbusMqtt(MqttGObjectBridge):
 		if payload:
 			topics = json.loads(payload)
 			for topic in topics:
-				self._subscriptions.subscribe(topic)
+				self._subscriptions.subscribe(topic, self._keep_alive_interval)
 		else:
-			self._subscriptions.subscribe_all()
+			self._subscriptions.subscribe_all(self._keep_alive_interval)
 		self._publish_all()
 
 		# TODO send this on connection
@@ -508,7 +509,7 @@ def main():
 	parser.add_argument('-P', '--mqtt-password', default=None, help='mqtt password')
 	parser.add_argument('-c', '--mqtt-certificate', default=None, help='path to CA certificate used for SSL communication')
 	parser.add_argument('-b', '--dbus', default=None, help='dbus address')
-	parser.add_argument('-k', '--keep-alive', default=60, help='keep alive interval in seconds', type=int)
+	parser.add_argument('-k', '--keep-alive', default=MAX_TOPIC_AGE, help='keep alive interval in seconds', type=int)
 	parser.add_argument('-i', '--init-broker', action='store_true', help='Tries to setup communication with VRM MQTT broker')
 	args = parser.parse_args()
 
@@ -518,9 +519,10 @@ def main():
 	mainloop = GLib.MainLoop()
 	# Have a mainloop, so we can send/receive asynchronous calls to and from dbus
 	DBusGMainLoop(set_as_default=True)
+	keep_alive_interval = args.keep_alive if args.keep_alive > 0 else None
 	handler = DbusMqtt(
 		mqtt_server=args.mqtt_server, ca_cert=args.mqtt_certificate, user=args.mqtt_user,
-		passwd=args.mqtt_password, dbus_address=args.dbus,
+		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
 		init_broker=args.init_broker, debug=args.debug)
 
 	# Handle SIGUSR1 and dump a stack trace
