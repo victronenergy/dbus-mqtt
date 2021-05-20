@@ -113,24 +113,87 @@ you will have to use a read request to retrieve the current value.
 Keep-alive
 ----------
 
-In order to avoid a lot of traffic to our cloud server, the script contains a keep-alive mechanism. Default
-keep-alive interval is 60 seconds. If the CCGX does not receive any read or write requests during that
-interval, the notifications will be stopped, until the next read or write request is received. 
-So to keep the notifications running, you'll have to send a read request regularly, for example:
+In order to avoid a lot of traffic to our cloud server, the script contains a
+keep-alive mechanism. The default keep-alive interval is 60 seconds.
+
+If the CCGX does not receive a keepalive within that 60-second interval,
+notifications will be stopped until another keepalive is received.
+
+### Important changes to the keepalive mechanism
+
+Please note that in earlier versions of this software, keep-alive was
+all-or-nothing. A single read request would cause all values from dbus to be
+forwarded. This made for lots of traffic and used a lot of CPU on the CCGX.  As
+the use of MQTT became more prevalent, the earlier keepalive method was no
+longer sufficient.
+
+### Detailed keepalive behaviour
+
+There are two ways to send a keepalive:
+
+ - Send a keepalive message to `R/d0ff500097c0/system/0/Serial` with an empty
+   payload. This is for backwards compatibility.
+ - Send a keepalive message to `R/<portal ID>/keepalive` with a list of topics
+   in the payload. This is now the preferred method.
+
+You can also send a read request, as detailed above. This will send only the item
+requested and will not -- as in earlier versions -- activate keepalive.
+
+#### Using the `system/0/Serial` method
+This is the de-facto method used in earlier versions of this software. Although
+keepalive was activated by *any* read request, most people simple requested
+the system serial as a simple shortcut for doing keep-alive.
+
+This method is retained for backwards compatibility. As in the past, this
+causes *all* items to be forwarded from dbus to MQTT. This could be thousands
+of topics. This method is now discouraged.
+
+To keep notifications running using this method, simply send a read request for
+the system serial periodically, for example:
 
 	Topic: R/e0ff50a097c0/system/0/Serial
 	Payload: empty
 
+
+#### Using the `/keepalive` method
+Using /keepalive allows for more fine-grained control. The JSON-encoded payload
+of the message can specify which topics you are interested in. A syntax similar
+to MQTT-topic syntax is supported.
+
+The Payload is either empty, or a JSON-encoded list of strings. Each string
+specifies the item of interest as `<service_type>/<device instance>/<D-Bus
+path>`. See the section on Notifications above for information about this.
+
+Any part of the topic-matching string can be replaced with a `+` to indicate a
+wildcard. The string may end with a `#` which indicates that all trailing parts
+are accepted.
+
+As an example, if you want all vebus related information, as well as the voltage readings from
+the solarchargers, the keepalive would look like this:
+
+    Topic: R/e0ff50a097c0/keepalive
+	Payload: ["vebus/#", "solarcharger/+/Dc/0/Voltage"]
+
+An empty payload causes all items to be forwarded from dbus to mqtt. This could
+cause thousands of topics to be created and is not advised in production.
+
+
+#### Keepalive timeout
+On a keep-alive timeout (at the end of the 60 second interval), all retained
+values will be removed from the broker (by publishing an empty payload).
+Subscriptions will yield no result when the keep-alive is not active.
+
+There is one exception: the serial number is always available and is never
+removed from the broker. This is useful if you are communicating with a CCGX on
+the local network: you can subscribe to the serial number, which is identical
+to the portal ID.
+
+#### Notes
 An easy way to send a periodic keep-alive message without having to do it manually is to run this command
 in a separate session and/or terminal window:
 
-    while :; do mosquitto_pub  -m '' -t 'R/e0ff50a097c0/system/0/Serial'; sleep 5; done
+    while :; do mosquitto_pub  -m '' -t 'R/e0ff50a097c0/keepalive'; sleep 5; done
 
-On a keep-alive timeout (at the end of the 60 second interval), all retained values will be removed from the
-broker (by publishing an empty payload), so subscriptions will yield no result when the keep-alive is not 
-active.
-There is one exception: the CCGX serial number is always available. This is useful if you are communicating
-with a CCGX on the local network: you can subscribe to the serial number, which is identical to the portal ID.
 
 Connecting to the Victron MQTT server
 -------------------------------------
