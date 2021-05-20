@@ -225,6 +225,10 @@ class DbusMqtt(MqttGObjectBridge):
 		self._client.subscribe('W/{}/#'.format(self._system_id), 0)
 		if self._registrator is not None and self._registrator.client_id is not None:
 			self._client.subscribe('$SYS/broker/connection/{}/state'.format(self._registrator.client_id), 0)
+
+		# Indicate that the new keepalive mechanism is supported
+		self._publish('N/{}/keepalive'.format(self._system_id), 1)
+
 		# Send all values at once, because values may have changed when we were disconnected.
 		self._publish_all()
 
@@ -283,10 +287,6 @@ class DbusMqtt(MqttGObjectBridge):
 		else:
 			self._subscriptions.subscribe_all(self._keep_alive_interval)
 		self._publish_all()
-
-		# TODO send this on connection
-		# Indicate that the new keepalive mechanism is supported
-		#self._publish('N/{}/keepalive'.format(self._system_id), 1)
 
 	def _handle_write(self, topic, payload):
 		logging.debug('[Write] Writing {} to {}'.format(payload, topic))
