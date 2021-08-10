@@ -121,8 +121,8 @@ exists.
    The payload may be blank, or may contain a list of topics of interest. See
    the [next section](#using-the-keepalive-method) for details on this.
 
- - For a simple command to activate keep-alive, see the [Notes](#notes) at the
-   end of this section.
+ - For a simple command to activate keep-alive on a Linux system, see the
+   [Notes](#notes) at the end of this section.
 
  - Please note that in earlier versions of this software, shipped prior to
    Venus 2.80, keep-alive worked differently. For details, see the [legacy
@@ -203,10 +203,15 @@ There is one exception to this rule: `N/<portal ID>/system/0/Serial` and
 This allows easily detecting the serial number of the installation(s).
 
 #### Notes
-An easy way to send a periodic keep-alive message without having to do it manually is to run this command
-in a separate session and/or terminal window:
+An easy way to send a periodic keep-alive message without having to do it
+manually is to run this command in a separate session and/or terminal window:
 
-    while :; do mosquitto_pub  -m '' -t 'R/e0ff50a097c0/keepalive'; sleep 5; done
+    while :; do mosquitto_pub  -h 192.168.8.60 -m '' -t 'R/e0ff50a097c0/keepalive'; sleep 5; done
+
+You will need to install the mosquitto client package. On a Debian or Ubuntu
+system this can be done with:
+
+    sudo apt-get install mosquitto_clients
 
 
 Connecting to the Victron MQTT server
