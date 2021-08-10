@@ -135,10 +135,16 @@ exists.
 
 There are two ways to send a keepalive:
 
- - [[1]](#using-the-keepalive-method) Send a keepalive message to `R/<portal ID>/keepalive` with a list of topics
-   in the payload. This is now the preferred method.
- - [[2]](#using-the-system0serial-method) Send a keepalive message to `R/<portal ID>/system/0/Serial` with an empty
-   payload. This is for backwards compatibility.
+ - [(a)](#using-the-system0serial-method) Use `R/<portal ID>/system/0/Serial`
+   when you want all topics to be published all the time. This works both before
+   Venus OS v2.80 and after.
+ - [(b)](#using-the-keepalive-method) Use `R/<portal ID>/keepalive` when you
+   want to get specific topics only. Note that the fine-grained control over
+   which topics to enable requires Venus OS v2.80 or later. Using the
+   /keepalive path does work for earlier versions, but will result in all
+   topics being published, rather than just a selected subset. You can use
+   this to obtain [backwards compatibility](#backwards-compatibility) across
+   Venus versions.
 
 #### Using the `/keepalive` method
 Using /keepalive allows for fine-grained control. The JSON-encoded payload
