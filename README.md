@@ -112,57 +112,42 @@ you will have to use a read request to retrieve the current value.
 
 Keep-alive
 ----------
+In order to avoid a lot of traffic to our cloud server, a keep-alive mechanism
+exists.
 
-In order to avoid a lot of traffic to our cloud server, the script contains a
-keep-alive mechanism. The default keep-alive interval is 60 seconds.
+### Summary (the important bits)
 
-If the CCGX does not receive a keepalive within that 60-second interval,
-notifications will be stopped until another keepalive is received.
+ - To activate keep-alive, send a read request to `R/<portal ID>/keepalive`.
+   The payload may be blank, or may contain a list of topics of interest. See
+   the [next section](#using-the-keepalive-method) for details on this.
 
-### Important changes to the keepalive mechanism
+ - For a simple command to activate keep-alive, see the [Notes](#notes) at the
+   end of this section.
 
-Please note that in earlier versions of this software, keep-alive was
-all-or-nothing. A single read request would cause all values from dbus to be
-forwarded. This made for lots of traffic and used a lot of CPU on the CCGX.  As
-the use of MQTT became more prevalent, the earlier keepalive method was no
-longer sufficient.
+ - Please note that in earlier versions of this software, shipped prior to
+   Venus 2.80, keep-alive worked differently. For details, see the [legacy
+   method](#using-the-system0serial-method) below.
+
+ - For implementations that need to be backwards compatible, see the
+   [section](#backwards-compatibility) below.
 
 ### Detailed keepalive behaviour
 
 There are two ways to send a keepalive:
 
- - Send a keepalive message to `R/d0ff500097c0/system/0/Serial` with an empty
-   payload. This is for backwards compatibility.
- - Send a keepalive message to `R/<portal ID>/keepalive` with a list of topics
+ - [[1]](#using-the-keepalive-method) Send a keepalive message to `R/<portal ID>/keepalive` with a list of topics
    in the payload. This is now the preferred method.
-
-You can also send a read request, as detailed above. This will send only the item
-requested and will not -- as in earlier versions -- activate keepalive.
-
-#### Using the `system/0/Serial` method
-This is the de-facto method used in earlier versions of this software. Although
-keepalive was activated by *any* read request, most people simple requested
-the system serial as a simple shortcut for doing keep-alive.
-
-This method is retained for backwards compatibility. As in the past, this
-causes *all* items to be forwarded from dbus to MQTT. This could be thousands
-of topics. This method is now discouraged.
-
-To keep notifications running using this method, simply send a read request for
-the system serial periodically, for example:
-
-	Topic: R/e0ff50a097c0/system/0/Serial
-	Payload: empty
-
+ - [[2]](#using-the-system0serial-method) Send a keepalive message to `R/<portal ID>/system/0/Serial` with an empty
+   payload. This is for backwards compatibility.
 
 #### Using the `/keepalive` method
-Using /keepalive allows for more fine-grained control. The JSON-encoded payload
+Using /keepalive allows for fine-grained control. The JSON-encoded payload
 of the message can specify which topics you are interested in. A syntax similar
 to MQTT-topic syntax is supported.
 
 The Payload is either empty, or a JSON-encoded list of strings. Each string
 specifies the item of interest as `<service_type>/<device instance>/<D-Bus
-path>`. See the section on Notifications above for information about this.
+path>`. See the section on [Notifications](#notifications) above for information about this.
 
 Any part of the topic-matching string can be replaced with a `+` to indicate a
 wildcard. The string may end with a `#` which indicates that all trailing parts
@@ -177,16 +162,45 @@ the solarchargers, the keepalive would look like this:
 An empty payload causes all items to be forwarded from dbus to mqtt. This could
 cause thousands of topics to be created and is not advised in production.
 
+#### Using the `system/0/Serial` method
+This is the de-facto method used in earlier versions of this software. Although
+keepalive was activated by *any* read request, most people simple requested
+the system serial as a simple shortcut for doing keep-alive.
+
+This method is retained for backwards compatibility. As in the past, this
+causes thousands of items to be forwarded from dbus to MQTT, and is now
+discouraged.
+
+To keep notifications running using this method, simply send a read request for
+the system serial periodically, for example:
+
+	Topic: R/e0ff50a097c0/system/0/Serial
+	Payload: empty
+
+#### Backwards compatibility
+Older versions of dbus-mqtt (prior to Venus 2.80) will also activate
+keep-alive when requesting `/keepalive`. There is therefore no need to detect
+support for this feature. New implementations can simply switch to using
+`/keepalive`.
+
+Older versions will ignore the payload and send everything.
+
+If you need to detect support for `/keepalive` for whatever reason, look for
+the existence of the topic `N/<portal ID>/keepalive`.
 
 #### Keepalive timeout
-On a keep-alive timeout (at the end of the 60 second interval), all retained
-values will be removed from the broker (by publishing an empty payload).
-Subscriptions will yield no result when the keep-alive is not active.
 
-There is one exception: the serial number is always available and is never
-removed from the broker. This is useful if you are communicating with a CCGX on
-the local network: you can subscribe to the serial number, which is identical
-to the portal ID.
+The default keep-alive interval is 60 seconds. If a keep-alive is not received
+within that 60-second interval, notifications will be stopped until another
+keepalive is received.
+
+On a keep-alive timeout, all retained values will be removed from the broker
+by publishing an empty payload. Subscriptions will yield no result when the
+keep-alive is not active.
+
+There is one exception to this rule: `N/<portal ID>/system/0/Serial` and
+`N/<portal ID/keepalive` is always published and never removed from the broker.
+This allows easily detecting the serial number of the installation(s).
 
 #### Notes
 An easy way to send a periodic keep-alive message without having to do it manually is to run this command
