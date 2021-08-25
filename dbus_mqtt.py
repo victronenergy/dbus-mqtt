@@ -269,13 +269,7 @@ class DbusMqtt(MqttGObjectBridge):
 	def _handle_serial_read(self, topic, payload):
 		""" Currently a request for /Serial is considered a subscription for
 		    backwards compatibility. """
-		if payload:
-			topics = json.loads(payload)
-			for topic in topics:
-				self._subscriptions.subscribe(topic, self._keep_alive_interval)
-		else:
-			self._subscriptions.subscribe_all(self._keep_alive_interval)
-
+		self._subscriptions.subscribe_all(self._keep_alive_interval)
 		self._publish(topic, self._system_id)
 		self._publish_all()
 
