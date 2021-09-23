@@ -12,6 +12,7 @@ import signal
 from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
 from collections import OrderedDict
+from functools import partial
 from gi.repository import GLib
 
 from itertools import zip_longest
@@ -489,12 +490,10 @@ def dumpstacks(signal, frame):
 		logging.info ("=== {} ===".format(id2name[tid]))
 		traceback.print_stack(f=stack)
 
-def exit(signal, frame):
-	sys.exit(0)
+def exit(mainloop, signal, frame):
+	mainloop.quit()
 
 def main():
-	signal.signal(signal.SIGINT, exit)
-
 	parser = argparse.ArgumentParser(description='Publishes values from the D-Bus to an MQTT broker')
 	parser.add_argument('-d', '--debug', help='set logging level to debug', action='store_true')
 	parser.add_argument('-q', '--mqtt-server', nargs='?', default=None, help='name of the mqtt server')
@@ -517,6 +516,9 @@ def main():
 		mqtt_server=args.mqtt_server, ca_cert=args.mqtt_certificate, user=args.mqtt_user,
 		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
 		init_broker=args.init_broker, debug=args.debug)
+
+	# Quit the mainloop on ctrl+C
+	signal.signal(signal.SIGINT, partial(exit, mainloop))
 
 	# Handle SIGUSR1 and dump a stack trace
 	signal.signal(signal.SIGUSR1, dumpstacks)
