@@ -81,6 +81,12 @@ class Topic(BaseTopic):
 	def __hash__(self):
 		return hash('/'.join(self.topic))
 
+class ExactTopic(Topic):
+	""" This is here because it is faster for matches without
+	    wildcards. """
+	def match(self, topic):
+		return self.topic == topic.split('/')
+
 class Subscriptions(object):
 	def __init__(self):
 		self.topics = []
@@ -96,13 +102,18 @@ class Subscriptions(object):
 		self.topics.insert(0, w)
 
 	def subscribe(self, topic, ttl=MAX_TOPIC_AGE):
-		t = Topic(topic, ttl)
+		t = Topic(topic, ttl) if '+' in topic or '#' in topic else ExactTopic(topic, ttl)
 		# Removing and re-adding updates timestamp and potentially also ttl
 		try:
 			self.topics.remove(t)
 		except ValueError:
-			pass
+			# topic wasn't in the list, add it
+			self.topics.append(t)
+			return t
+
+		# Topic was in the list, but removed. Re-add it.
 		self.topics.append(t)
+		return None
 
 	def match(self, t):
 		return any(topic.match(t) for topic in self.topics)
@@ -187,7 +198,9 @@ class DbusMqtt(MqttGObjectBridge):
 			self._publish(topic, value)
 		else:
 			_topic = topic.split('/', 2)[2]
-			if self._subscriptions.match(_topic):
+			if PublishedTopic(topic) in self._published:
+				self._publish(topic, value)
+			elif self._subscriptions.match(_topic):
 				self._published.add(PublishedTopic(topic, _topic))
 				self._publish(topic, value)
 
@@ -277,10 +290,19 @@ class DbusMqtt(MqttGObjectBridge):
 		if payload:
 			topics = json.loads(payload)
 			for topic in topics:
-				self._subscriptions.subscribe(topic, self._keep_alive_interval)
+				ob = self._subscriptions.subscribe(topic, self._keep_alive_interval)
+				# Publish only those that are directly matched by the newly
+				# added match. If we end up with overlap, it is no biggie. It
+				# is queued and rate-limited anyway.
+				if ob is not None:
+					for k, v in self._values.items():
+						short = k.split('/', 2)[2]
+						if ob.match(short):
+							self._published.add(PublishedTopic(k, short))
+							self._publish(k, v)
 		else:
 			self._subscriptions.subscribe_all(self._keep_alive_interval)
-		self._publish_all()
+			self._publish_all()
 
 	def _handle_write(self, topic, payload):
 		logging.debug('[Write] Writing {} to {}'.format(payload, topic))
