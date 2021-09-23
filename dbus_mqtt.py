@@ -9,7 +9,6 @@ import sys
 from time import time
 import traceback
 import signal
-import six
 from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
 from collections import OrderedDict
@@ -428,7 +427,7 @@ class DbusMqtt(MqttGObjectBridge):
 
 	def _service_queue(self, items=5):
 		self._last_queue_run = time()
-		for _ in six.moves.range(items):
+		for _ in range(items):
 			try:
 				topic, value = self.queue.popitem(last=False)
 			except KeyError:
