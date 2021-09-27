@@ -106,14 +106,16 @@ class Subscriptions(object):
 		self.topics = []
 
 	def subscribe_all(self, ttl=MAX_TOPIC_AGE):
+		# Put it first in the list for performance reasons
 		w = WildcardTopic(ttl)
 		try:
 			self.topics.remove(w)
 		except ValueError:
-			pass
+			self.topics.insert(0, w)
+			return w
 
-		# Put it first in the list for performance reasons
 		self.topics.insert(0, w)
+		return None
 
 	def subscribe(self, topic, ttl=MAX_TOPIC_AGE):
 		t = Topic(topic.split('/'), ttl) if '+' in topic or '#' in topic else ExactTopic(topic.split('/'), ttl)
@@ -300,9 +302,9 @@ class DbusMqtt(MqttGObjectBridge):
 	def _handle_serial_read(self, topic, payload):
 		""" Currently a request for /Serial is considered a subscription for
 		    backwards compatibility. """
-		self._subscriptions.subscribe_all(self._keep_alive_interval)
-		self._publish(topic, self._system_id)
-		self._publish_all()
+		if self._subscriptions.subscribe_all(self._keep_alive_interval) is not None:
+			self._publish(topic, self._system_id)
+			self._publish_all()
 
 	def _handle_keepalive(self, payload):
 		if payload:
@@ -319,8 +321,8 @@ class DbusMqtt(MqttGObjectBridge):
 							self._published.add(pt)
 							self._publish(k, v)
 		else:
-			self._subscriptions.subscribe_all(self._keep_alive_interval)
-			self._publish_all() # TODO make this better!
+			if self._subscriptions.subscribe_all(self._keep_alive_interval) is not None:
+				self._publish_all()
 
 	def _handle_write(self, topic, payload):
 		logging.debug('[Write] Writing {} to {}'.format(payload, topic))
