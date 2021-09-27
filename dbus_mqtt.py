@@ -12,7 +12,7 @@ import signal
 from dbus.mainloop.glib import DBusGMainLoop
 from lxml import etree
 from collections import OrderedDict
-from functools import partial
+from functools import partial, update_wrapper
 from gi.repository import GLib
 
 from itertools import zip_longest
@@ -32,6 +32,20 @@ VeDbusInvalid = dbus.Array([], signature=dbus.Signature('i'), variant_level=1)
 blocked_items = {('vebus', u'/Interfaces/Mk2/Tunnel'), ('paygo', '/LVD/Threshold')}
 
 MAX_TOPIC_AGE = 60
+
+class reify(object):
+	""" Decorator for class methods. Turns the method into a property that
+	    is evaluated once, and then replaces the property, effectively caching
+	    it and evaluating it only once. """
+	def __init__(self, wrapped):
+		self.wrapped = wrapped
+		update_wrapper(self, wrapped)
+	def __get__(self, inst, objtype=None):
+		if inst is None:
+			return self
+		val = self.wrapped(inst)
+		setattr(inst, self.wrapped.__name__, val)
+		return val
 
 class BaseTopic(object):
 	__slots__ = ('topic','timestamp', 'maxage')
@@ -60,10 +74,10 @@ class WildcardTopic(BaseTopic):
 class Topic(BaseTopic):
 	def __init__(self, t, maxage):
 		super(Topic, self).__init__(maxage)
-		self.topic = t.split('/')
+		self.topic = tuple(t)
 
 	def match(self, topic):
-		for x, y in zip_longest(self.topic, topic.split('/')):
+		for x, y in zip_longest(self.topic, topic):
 			if None in (x, y):
 				return False
 			if '+' in (x, y):
@@ -85,7 +99,7 @@ class ExactTopic(Topic):
 	""" This is here because it is faster for matches without
 	    wildcards. """
 	def match(self, topic):
-		return self.topic == topic.split('/')
+		return self.topic == topic
 
 class Subscriptions(object):
 	def __init__(self):
@@ -102,7 +116,7 @@ class Subscriptions(object):
 		self.topics.insert(0, w)
 
 	def subscribe(self, topic, ttl=MAX_TOPIC_AGE):
-		t = Topic(topic, ttl) if '+' in topic or '#' in topic else ExactTopic(topic, ttl)
+		t = Topic(topic.split('/'), ttl) if '+' in topic or '#' in topic else ExactTopic(topic.split('/'), ttl)
 		# Removing and re-adding updates timestamp and potentially also ttl
 		try:
 			self.topics.remove(t)
@@ -118,28 +132,34 @@ class Subscriptions(object):
 	def match(self, t):
 		return any(topic.match(t) for topic in self.topics)
 
-	def cleanup(self, published):
+	def cleanup(self, published, exceptions):
 		""" Remove expired topics from subscriptions. Return topics that
 		    should be unpublished. """
 		affected_topics = set()
 		now = int(time())
-		for r in [t for t in self.topics if max(0, now - t.timestamp) > t.maxage]:
-			# Expire the topic
-			self.topics.remove(r)
+		expired = [t for t in self.topics if max(0, now - t.timestamp) > t.maxage]
+		if expired:
+			for r in expired:
+				# Expire the topic
+				self.topics.remove(r)
 
-		if any(isinstance(t, WildcardTopic) for t in self.topics):
-			# No need to traverse everything, they will all match
-			return ()
+			if any(isinstance(t, WildcardTopic) for t in self.topics):
+				# No need to traverse everything, they will all match
+				return ()
 
-		# Find topics that should no longer be published
-		return list(filter(lambda t: not self.match(t.shorttopic), published))
+			# Find topics that should no longer be published
+			return list(filter(lambda t: not self.match(t.shorttopic), published - exceptions))
+
+		# Nothing was expired
+		return ()
 
 # Keep track of full and short topic
 class PublishedTopic(object):
-	__slots__ = ('fulltopic', 'shorttopic')
-	def __init__(self, fulltopic, shorttopic=None):
+	def __init__(self, fulltopic):
 		self.fulltopic = fulltopic
-		self.shorttopic = shorttopic
+	@reify
+	def shorttopic(self):
+		return tuple(self.fulltopic.split('/')[2:])
 	def __eq__(self, other):
 		return isinstance(other, PublishedTopic) and self.fulltopic == other.fulltopic
 	def __hash__(self):
@@ -157,6 +177,8 @@ class DbusMqtt(MqttGObjectBridge):
 
 		# @todo EV Get portal ID from com.victronenergy.system?
 		self._system_id = get_vrm_portal_id()
+		self._system_id_topic = PublishedTopic('N/{}/system/0/Serial'.format(
+			self._system_id))
 		# Key: D-BUS Service + path, value: topic
 		self._topics = {}
 		# Key: topic, value: last value seen on D-Bus
@@ -194,27 +216,18 @@ class DbusMqtt(MqttGObjectBridge):
 
 	def publish(self, topic, value):
 		""" Publish to mqtt IF keepalive permits. Publish only topics that are currently alive. """
-		if topic.endswith('/system/0/Serial'):
+		pt = PublishedTopic(topic)
+		if pt in self._published:
 			self._publish(topic, value)
-		else:
-			_topic = topic.split('/', 2)[2]
-			if PublishedTopic(topic) in self._published:
-				self._publish(topic, value)
-			elif self._subscriptions.match(_topic):
-				self._published.add(PublishedTopic(topic, _topic))
-				self._publish(topic, value)
+		elif self._subscriptions.match(pt.shorttopic):
+			self._published.add(pt)
+			self._publish(topic, value)
 
 	def _publish(self, topic, value):
-		if self._socket_watch is None:
-			return
-
 		# Put it into the queue
 		self.queue[topic] = json.dumps(dict(value=value))
 
 	def _unpublish(self, topic):
-		if self._socket_watch is None:
-			return
-
 		# Put it into the queue
 		self._published.discard(PublishedTopic(topic))
 		self.queue[topic] = None
@@ -225,7 +238,7 @@ class DbusMqtt(MqttGObjectBridge):
 
 	def _expire_stale_topics(self):
 		try:
-			for pt in self._subscriptions.cleanup(self._published):
+			for pt in self._subscriptions.cleanup(self._published, {self._system_id_topic}):
 				logging.debug("Expiring topic %s", pt.shorttopic)
 				self._unpublish(pt.fulltopic)
 		finally:
@@ -241,6 +254,11 @@ class DbusMqtt(MqttGObjectBridge):
 
 		# Indicate that the new keepalive mechanism is supported
 		self._publish('N/{}/keepalive'.format(self._system_id), 1)
+
+		# Publish serial number once. It never changes, and it is retained in
+		# the broker. Lower down we take care not to unpublish it (should
+		# systemcalc be restarted).
+		self._publish(self._system_id_topic.fulltopic, self._system_id)
 
 		# Send all values at once, because values may have changed when we were disconnected.
 		self._publish_all()
@@ -296,13 +314,13 @@ class DbusMqtt(MqttGObjectBridge):
 				# is queued and rate-limited anyway.
 				if ob is not None:
 					for k, v in self._values.items():
-						short = k.split('/', 2)[2]
-						if ob.match(short):
-							self._published.add(PublishedTopic(k, short))
+						pt = PublishedTopic(k)
+						if pt not in self._published and ob.match(pt.shorttopic):
+							self._published.add(pt)
 							self._publish(k, v)
 		else:
 			self._subscriptions.subscribe_all(self._keep_alive_interval)
-			self._publish_all()
+			self._publish_all() # TODO make this better!
 
 	def _handle_write(self, topic, payload):
 		logging.debug('[Write] Writing {} to {}'.format(payload, topic))
@@ -448,9 +466,15 @@ class DbusMqtt(MqttGObjectBridge):
 				GLib.idle_add(self._service_queue)
 		return True
 
-	def _service_queue(self, items=5):
+	def _service_queue(self):
+		# If we are not connected, we cannot service the queue
+		if self._socket_watch is None:
+			return False
+
+		# To remain somewhat responsive, limit the number of items
+		# published and schedule the rest when idle again.
 		self._last_queue_run = time()
-		for _ in range(items):
+		for _ in range(50):
 			try:
 				topic, value = self.queue.popitem(last=False)
 			except KeyError:
