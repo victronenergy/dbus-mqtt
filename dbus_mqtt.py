@@ -227,7 +227,7 @@ class DbusMqtt(MqttGObjectBridge):
 
 	def _publish(self, topic, value):
 		# Put it into the queue
-		self.queue[topic] = json.dumps(dict(value=value))
+		self.queue[topic] = json.dumps(dict(value=unwrap_dbus_value(value)))
 
 	def _unpublish(self, topic):
 		# Put it into the queue
@@ -403,10 +403,9 @@ class DbusMqtt(MqttGObjectBridge):
 
 			if isinstance(items, dict):
 				for path, value in items.items():
-					v = unwrap_dbus_value(value)
-					topic = self._add_item(service, device_instance, path, value=v)
+					topic = self._add_item(service, device_instance, path, value=value)
 					if publish and topic is not None:
-						self.publish(topic, v)
+						self.publish(topic, value)
 
 		except dbus.exceptions.DBusException as e:
 			if e.get_dbus_name() == 'org.freedesktop.DBus.Error.ServiceUnknown' or \
@@ -457,7 +456,6 @@ class DbusMqtt(MqttGObjectBridge):
 		value = changes.get("Value")
 		if value is None:
 			return
-		value = unwrap_dbus_value(value)
 		self._values[topic] = value
 		self.publish(topic, value)
 
@@ -508,8 +506,7 @@ class DbusMqtt(MqttGObjectBridge):
 		return topic
 
 	def _get_dbus_value(self, service, path):
-		value = self._dbus_conn.call_blocking(service, path, None, 'GetValue', '', [])
-		return unwrap_dbus_value(value)
+		return self._dbus_conn.call_blocking(service, path, None, 'GetValue', '', [])
 
 	def _set_dbus_value(self, service, path, value):
 		value = wrap_dbus_value(value)
