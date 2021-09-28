@@ -227,7 +227,7 @@ class DbusMqtt(MqttGObjectBridge):
 
 	def _publish(self, topic, value):
 		# Put it into the queue
-		self.queue[topic] = json.dumps(dict(value=unwrap_dbus_value(value)))
+		self.queue[topic] = value
 
 	def _unpublish(self, topic):
 		# Put it into the queue
@@ -481,7 +481,9 @@ class DbusMqtt(MqttGObjectBridge):
 				return False
 			else:
 				try:
-					self._client.publish(topic, value, retain=True)
+					self._client.publish(topic,
+						None if value is None else json.dumps(dict(value=unwrap_dbus_value(value))),
+						retain=True)
 				except:
 					logging.error('[Queue] Error publishing: {} {}'.format(topic, value))
 					traceback.print_exc()
