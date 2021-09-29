@@ -441,6 +441,18 @@ class DbusMqtt(MqttGObjectBridge):
 		service = self._service_ids.get(service_id)
 		if service is None:
 			return
+
+		value = changes.get("Value")
+		if value is None:
+			return
+
+		if path == '/' and isinstance(value, dict):
+			for p, v in value.items():
+				self._value_changed_inner(service, '/' + p, v)
+		else:
+			self._value_changed_inner(service, path, value)
+
+	def _value_changed_inner(self, service, path, value):
 		uid = service + path
 		topic = self._topics.get(uid)
 		if topic is None:
@@ -453,9 +465,6 @@ class DbusMqtt(MqttGObjectBridge):
 					break
 			else:
 				return
-		value = changes.get("Value")
-		if value is None:
-			return
 		self._values[topic] = value
 		self.publish(topic, value)
 
