@@ -207,6 +207,9 @@ class DbusMqtt(MqttGObjectBridge):
 		self._dbus_conn.add_signal_receiver(self._on_dbus_value_changed,
 			dbus_interface='com.victronenergy.BusItem', signal_name='PropertiesChanged', path_keyword='path',
 			sender_keyword='service_id')
+		self._dbus_conn.add_signal_receiver(self._on_dbus_items_changed,
+			dbus_interface='com.victronenergy.BusItem',
+			signal_name='ItemsChanged', path='/', sender_keyword='service_id')
 		services = self._dbus_conn.list_names()
 		for service in services:
 			if service.startswith('com.victronenergy.'):
@@ -437,6 +440,20 @@ class DbusMqtt(MqttGObjectBridge):
 						p = path + '/' + name
 					self._introspect(service, device_instance, p, publish=publish)
 
+	def _on_dbus_items_changed(self, items, service_id=None):
+		service = self._service_ids.get(service_id)
+		if service is None:
+			return
+
+		if isinstance(items, dict):
+			for path, changes in items.items():
+				try:
+					v = changes['Value']
+				except KeyError:
+					pass
+				else:
+					self._value_changed_inner(service, path, v)
+
 	def _on_dbus_value_changed(self, changes, path=None, service_id=None):
 		service = self._service_ids.get(service_id)
 		if service is None:
@@ -446,11 +463,7 @@ class DbusMqtt(MqttGObjectBridge):
 		if value is None:
 			return
 
-		if path == '/' and isinstance(value, dict):
-			for p, v in value.items():
-				self._value_changed_inner(service, '/' + p, v)
-		else:
-			self._value_changed_inner(service, path, value)
+		self._value_changed_inner(service, path, value)
 
 	def _value_changed_inner(self, service, path, value):
 		uid = service + path
