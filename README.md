@@ -14,6 +14,14 @@ communication to the central Victron MQTT broker (see the broker URL section for
 control your CCGX over the internet. You'll need your VRM credentials to access this broker. See 'Connecting
 to the Victron MQTT server' below.
 
+Support
+-------
+Please don't use the issue tracker of this repo.
+
+Instead, search & post at the Modifications section of our community forum:
+
+https://community.victronenergy.com/spaces/31/mods.html
+
 Set-up
 ------
 Starting from CCGX version 1.70, dbus-mqtt is installed by default, but is not enabled. You can enable it in
