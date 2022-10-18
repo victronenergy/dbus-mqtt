@@ -21,7 +21,7 @@ from itertools import zip_longest
 AppDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(1, os.path.join(AppDir, 'ext', 'velib_python'))
 from logger import setup_logging
-from ve_utils import get_vrm_portal_id, exit_on_error, wrap_dbus_value, unwrap_dbus_value
+from ve_utils import get_vrm_portal_id, exit_on_error, wrap_dbus_value, unwrap_dbus_value, add_name_owner_changed_receiver
 from mqtt_gobject_bridge import MqttGObjectBridge
 from mosquitto_bridge_registrator import MosquittoBridgeRegistrator
 
@@ -174,7 +174,7 @@ class DbusMqtt(MqttGObjectBridge):
 		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
 			if dbus_address is None \
 			else dbus.bus.BusConnection(dbus_address)
-		self._dbus_conn.add_signal_receiver(self._dbus_name_owner_changed, signal_name='NameOwnerChanged')
+		add_name_owner_changed_receiver(self._dbus_conn, self._dbus_name_owner_changed)
 		self._connected_to_cloud = False
 
 		# @todo EV Get portal ID from com.victronenergy.system?
