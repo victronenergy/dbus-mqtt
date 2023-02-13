@@ -405,7 +405,8 @@ class DbusMqtt(MqttGObjectBridge):
 			else:
 				if isinstance(items, dict):
 					for path, props in items.items():
-						topic = self._add_item(service, device_instance, path[1:], props.get('value'))
+						value = props.get('value')
+						topic = self._add_item(service, device_instance, path[1:], value)
 						if publish and topic is not None:
 							self.publish(topic, value)
 				return
