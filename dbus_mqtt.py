@@ -393,6 +393,20 @@ class DbusMqtt(MqttGObjectBridge):
 				device_instance = 0
 			short_service_name = get_short_service_name(service, device_instance)
 			self._services[short_service_name] = service
+
+			# Scan using GetItems
+			try:
+				items = self._get_dbus_items(service)
+			except dbus.exceptions.DBusException:
+				pass
+			else:
+				if isinstance(items, dict):
+					for path, props in items.items():
+						topic = self._add_item(service, device_instance, path[1:], props.get('value'))
+						if publish and topic is not None:
+							self.publish(topic, value)
+				return
+
 			try:
 				items = self._get_dbus_value(service, '/')
 			except dbus.exceptions.DBusException as e:
@@ -535,6 +549,9 @@ class DbusMqtt(MqttGObjectBridge):
 	def _set_dbus_value(self, service, path, value):
 		value = wrap_dbus_value(value)
 		return self._dbus_conn.call_blocking(service, path, None, 'SetValue', 'v', [value])
+
+	def _get_dbus_items(self, service):
+		return self._dbus_conn.call_blocking(service, '/', 'com.victronenergy.BusItem', 'GetItems', '', [])
 
 def get_service_type(service_name):
 	if not service_name.startswith(ServicePrefix):
