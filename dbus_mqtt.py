@@ -214,7 +214,10 @@ class DbusMqtt(MqttGObjectBridge):
 		for service in services:
 			if service.startswith('com.victronenergy.'):
 				self._service_ids[self._dbus_conn.get_name_owner(service)] = service
-				self._scan_dbus_service(service)
+				try:
+					self._scan_dbus_service(service)
+				except:
+					logging.exception("_scan_dbus_service")
 
 		self._keep_alive_interval = keep_alive_interval
 		MqttGObjectBridge.__init__(self, mqtt_server, "ve-dbus-mqtt-py", ca_cert, user, passwd, debug)
