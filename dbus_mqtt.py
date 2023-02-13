@@ -29,7 +29,11 @@ from mosquitto_bridge_registrator import MosquittoBridgeRegistrator
 SoftwareVersion = '1.32'
 ServicePrefix = 'com.victronenergy.'
 VeDbusInvalid = dbus.Array([], signature=dbus.Signature('i'), variant_level=1)
-blocked_items = {('vebus', u'/Interfaces/Mk2/Tunnel'), ('paygo', '/LVD/Threshold')}
+blocked_items = {
+	('system', '/Serial'),
+	('vebus', '/Interfaces/Mk2/Tunnel'),
+	('paygo', '/LVD/Threshold')
+}
 
 MAX_TOPIC_AGE = 60
 
@@ -248,10 +252,14 @@ class DbusMqtt(MqttGObjectBridge):
 		for topic in sorted(self._values.keys()):
 			self.publish(topic, self._values[topic])
 
+	def _publish_system_id(self):
+		self._client.publish(self._system_id_topic.fulltopic,
+			json.dumps({"value": self._system_id}), retain=True)
+
 	def _housekeeping(self):
 		# Clean up any topics that had their subscription rules expire
 		try:
-			for pt in self._subscriptions.cleanup(self._published, {self._system_id_topic}):
+			for pt in self._subscriptions.cleanup(self._published, set()):
 				logging.debug("Expiring topic %s", pt.shorttopic)
 				self._unpublish(pt.fulltopic)
 		except Exception:
@@ -283,9 +291,8 @@ class DbusMqtt(MqttGObjectBridge):
 		self._publish('N/{}/keepalive'.format(self._system_id), 1)
 
 		# Publish serial number once. It never changes, and it is retained in
-		# the broker. Lower down we take care not to unpublish it (should
-		# systemcalc be restarted).
-		self._publish(self._system_id_topic.fulltopic, self._system_id)
+		# the broker.
+		self._publish_system_id()
 
 		# Send all values at once, because values may have changed when we were disconnected.
 		self._publish_all()
@@ -329,8 +336,8 @@ class DbusMqtt(MqttGObjectBridge):
 	def _handle_serial_read(self, topic, payload):
 		""" Currently a request for /Serial is considered a subscription for
 		    backwards compatibility. """
+		self._publish_system_id()
 		if self._subscriptions.subscribe_all(self._keep_alive_interval) is not None:
-			self._publish(topic, self._system_id)
 			self._publish_all()
 
 	def _handle_keepalive(self, payload):
@@ -393,8 +400,7 @@ class DbusMqtt(MqttGObjectBridge):
 			for path, topic in list(self._topics.items()):
 				if path.startswith(name + '/'):
 					# Leave the serial number alone
-					if not topic.endswith('/system/0/Serial'):
-						self._unpublish(topic)
+					self._unpublish(topic)
 					del self._topics[path]
 					del self._values[topic]
 			if name in self._services:
@@ -544,7 +550,7 @@ class DbusMqtt(MqttGObjectBridge):
 				try:
 					self._client.publish(topic,
 						None if value is None else json.dumps(dict(value=unwrap_dbus_value(value))),
-						retain=True)
+						retain=False)
 				except:
 					logging.error('[Queue] Error publishing: {} {}'.format(topic, value))
 					traceback.print_exc()
