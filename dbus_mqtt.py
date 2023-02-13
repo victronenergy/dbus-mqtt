@@ -399,7 +399,7 @@ class DbusMqtt(MqttGObjectBridge):
 				if e.get_dbus_name() == 'org.freedesktop.DBus.Error.UnknownObject' or \
 					e.get_dbus_name() == 'org.freedesktop.DBus.Error.UnknownMethod':
 					self._introspect(service, device_instance, '/', publish)
-					logging.warn('[Scanning] {} does not provide an item listing'.format(service))
+					logging.warning('[Scanning] {} does not provide an item listing'.format(service))
 					return
 				else:
 					raise
