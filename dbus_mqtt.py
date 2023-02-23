@@ -105,9 +105,6 @@ class Subscriptions(object):
 	def __init__(self):
 		self.topics = []
 
-	def __len__(self):
-		return len(self.topics)
-
 	def subscribe_all(self, ttl=MAX_TOPIC_AGE):
 		# Put it first in the list for performance reasons
 		w = WildcardTopic(ttl)
@@ -179,7 +176,6 @@ class DbusMqtt(MqttGObjectBridge):
 			else dbus.bus.BusConnection(dbus_address)
 		add_name_owner_changed_receiver(self._dbus_conn, self._dbus_name_owner_changed)
 		self._connected_to_cloud = False
-		self._cloud_timestamp = None
 
 		# @todo EV Get portal ID from com.victronenergy.system?
 		self._system_id = get_vrm_portal_id()
@@ -199,7 +195,7 @@ class DbusMqtt(MqttGObjectBridge):
 		# A queue of value changes, so that we may rate-limit this somewhat
 		self.queue = OrderedDict()
 		GLib.timeout_add(1000, self._timer_service_queue)
-		GLib.timeout_add(10000, self._housekeeping)
+		GLib.timeout_add(10000, self._expire_stale_topics)
 		self._last_queue_run = 0
 
 		if init_broker:
@@ -248,28 +244,13 @@ class DbusMqtt(MqttGObjectBridge):
 		for topic in sorted(self._values.keys()):
 			self.publish(topic, self._values[topic])
 
-	def _housekeeping(self):
-		# Clean up any topics that had their subscription rules expire
+	def _expire_stale_topics(self):
 		try:
 			for pt in self._subscriptions.cleanup(self._published, {self._system_id_topic}):
 				logging.debug("Expiring topic %s", pt.shorttopic)
 				self._unpublish(pt.fulltopic)
-		except Exception:
-			logging.exception("Expiring topics")
-
-		# If anything is still published, send a reverse-keepalive
-		# (from us to any remote consumers) to indicate we're still
-		# alive and connected.
-		if len(self._subscriptions):
-			try:
-				self._client.publish('N/{}/heartbeat'.format(self._system_id), json.dumps({
-					"topics": len(self._published),
-					"clouduptime": int(time() - self._cloud_timestamp) if self._cloud_timestamp is not None else 0
-				}), retain=False)
-			except Exception:
-				logging.exception("Heartbeat")
-
-		return True
+		finally:
+			return True
 
 	def _on_connect(self, client, userdata, dict, rc):
 		MqttGObjectBridge._on_connect(self, client, userdata, dict, rc)
@@ -296,7 +277,6 @@ class DbusMqtt(MqttGObjectBridge):
 			if int(msg.payload) == 1:
 				logging.info('[Message] Connected to cloud broker')
 				self._connected_to_cloud = True
-				self._cloud_timestamp = time()
 			elif self._connected_to_cloud:
 				# As long as we have connection with the cloud server, we do not have to worry about
 				# authentication. After connection loss, we have to authenticate again, which is a nice
@@ -304,7 +284,6 @@ class DbusMqtt(MqttGObjectBridge):
 				# server, or if someone has unlinks VRM page.
 				logging.error('[Message] Lost connection with cloud broker')
 				self._connected_to_cloud = False
-				self._cloud_timestamp = None
 				self._registrator.register()
 			return
 		try:
