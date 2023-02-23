@@ -228,6 +228,30 @@ system this can be done with:
     sudo apt-get install mosquitto_clients
 
 
+Heartbeat
+---------
+
+A heartbeat mesage is sent every 10 seconds for as long as keep-alive is
+active. This is a message of the form `N/<portal id>/heartbeat`, and the
+payload will be json that shows the number of topics actively published
+as well as how long we've been connected to the Victron MQTT server.
+
+This message helps our own VRM dashboard to better detect if a site is still
+online, but may also be used for other applications where data changes
+infrequently and a periodic ping is useful.
+
+Please note that the heartbeat is sent only while keep-alive is active.
+This is to prevent sending heatbeat messages while no other data is present
+anyway.
+
+### Example
+```
+N/badb33fi5bad/heartbeat {
+	"topics": 25,
+	"clouduptime": 609
+}
+```
+
 Connecting to the Victron MQTT server
 -------------------------------------
 
