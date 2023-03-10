@@ -266,12 +266,19 @@ Again: do not set the retain flag when sending write requests.
 
 Determining the broker URL for a given installation
 ---------------------------------------------------
-To allow broker scaling, each installation connects to one of the 128 available broker URLs.
-To determine the URL of the broker:
+To allow broker scaling, each installation connects to one of 128 available broker hostnames. To determine the hostname of the broker for an installation, you can either request it from the VRM API, or use an alghorithm.
+
+For the VRM API, see the [documentation for listing a user's installations](https://vrm-api-docs.victronenergy.com/#/operations/users/idUser/installations). Each site has a field `mqtt_webhost` and `mqtt_host`. Be sure to add `?extended=1` to the API URL. So, for instance: `https://vrmapi.victronenergy.com/v2/users/<myuserid>/installations?extended=1`.
+
+If it's preferred to calculate it yourself, you can use this alghorithm:
+
 - the `ord()` value of each charachter of the VRM portal ID should be summed.
 - the modulo of the sum and 128 determines the broker index number
 - the broker URL then is: `mqtt<broker_index>.victronenergy.com`, e.g.: `mqtt101.victronenergy.com`
-An example implementation of this algorithm in python is:
+- the same goes for the websocket host: `webmqtt<broker_index>.victronenergy.com`
+
+An example implementation of this algorithm in Python is:
+
 ```python
 def _get_vrm_broker_url(self):
     sum = 0
@@ -280,3 +287,4 @@ def _get_vrm_broker_url(self):
     broker_index = sum % 128
     return "mqtt{}.victronenergy.com".format(broker_index)
 ```
+
