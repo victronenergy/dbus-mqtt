@@ -1,6 +1,11 @@
 dbus-mqtt
 =========
 
+**UPDATE 2023-06-09: We're working hard to retire dbus-mqtt, in favor of dbus-flashmq. Details here:**
+https://github.com/victronenergy/venus/issues/1098.
+
+---------
+
 A python application that publishes values from the D-Bus to an MQTT broker. The script also supports requests
 from the MQTT broker to change values on the local D-Bus.
 
