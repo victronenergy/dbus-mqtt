@@ -154,7 +154,7 @@ There are two ways to send a keepalive:
    this to obtain [backwards compatibility](#backwards-compatibility) across
    Venus versions.
 
-#### Using the `/keepalive` method
+#### Using the `/keepalive` method for selective keep-alives
 Using /keepalive allows for fine-grained control. The JSON-encoded payload
 of the message can specify which topics you are interested in. A syntax similar
 to MQTT-topic syntax is supported.
