@@ -169,13 +169,14 @@ class PublishedTopic(object):
 
 class DbusMqtt(MqttGObjectBridge):
 	def __init__(self, mqtt_server=None, ca_cert=None, user=None, passwd=None, dbus_address=None,
-				keep_alive_interval=None, init_broker=False, debug=False):
+				 keep_alive_interval=None, init_broker=False, debug=False, publish_unwrapped=False):
 		self._dbus_address = dbus_address
 		self._dbus_conn = (dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()) \
 			if dbus_address is None \
 			else dbus.bus.BusConnection(dbus_address)
 		add_name_owner_changed_receiver(self._dbus_conn, self._dbus_name_owner_changed)
 		self._connected_to_cloud = False
+		self._publish_unwrapped = publish_unwrapped
 
 		# @todo EV Get portal ID from com.victronenergy.system?
 		self._system_id = get_vrm_portal_id()
@@ -353,7 +354,10 @@ class DbusMqtt(MqttGObjectBridge):
 		# but can nevertheless be read.
 		value = self._get_dbus_value(service, '/' + path)
 		if self._add_item(service, device_instance, path, value=value) == topic:
-			self._client.publish(topic, json.dumps(dict(value=value)), retain=False)
+			if self._publish_unwrapped:
+				self._client.publish(topic, value, retain=False)
+			else:
+				self._client.publish(topic, json.dumps(dict(value=value)), retain=False)
 
 	def _get_uid_by_topic(self, topic):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
@@ -521,9 +525,18 @@ class DbusMqtt(MqttGObjectBridge):
 				return False
 			else:
 				try:
-					self._client.publish(topic,
-						None if value is None else json.dumps(dict(value=unwrap_dbus_value(value))),
-						retain=True)
+					if self._publish_unwrapped:
+						val = None if value is None else unwrap_dbus_value(value)
+						if type(val) not in [int, str, float] and val is not None:
+							# now we still need to wrap
+							val = json.dumps(dict(value=val))
+						self._client.publish(topic,
+							val ,
+							retain=True)
+					else:
+						self._client.publish(topic,
+							None if value is None else json.dumps(dict(value=unwrap_dbus_value(value))),
+							retain=True)
 				except:
 					logging.error('[Queue] Error publishing: {} {}'.format(topic, value))
 					traceback.print_exc()
@@ -591,6 +604,7 @@ def main():
 	parser.add_argument('-P', '--mqtt-password', default=None, help='mqtt password')
 	parser.add_argument('-c', '--mqtt-certificate', default=None, help='path to CA certificate used for SSL communication')
 	parser.add_argument('-b', '--dbus', default=None, help='dbus address')
+	parser.add_argument('-w', '--publish-unwrapped', help='publish mqtt values unwrapped i.e. without the json "value" wrapper', action='store_true')
 	parser.add_argument('-k', '--keep-alive', default=MAX_TOPIC_AGE, help='keep alive interval in seconds', type=int)
 	parser.add_argument('-i', '--init-broker', action='store_true', help='Tries to setup communication with VRM MQTT broker')
 	args = parser.parse_args()
@@ -605,7 +619,7 @@ def main():
 	handler = DbusMqtt(
 		mqtt_server=args.mqtt_server, ca_cert=args.mqtt_certificate, user=args.mqtt_user,
 		passwd=args.mqtt_password, dbus_address=args.dbus, keep_alive_interval=keep_alive_interval,
-		init_broker=args.init_broker, debug=args.debug)
+		init_broker=args.init_broker, debug=args.debug, publish_unwrapped=args.publish_unwrapped)
 
 	# Quit the mainloop on ctrl+C
 	signal.signal(signal.SIGINT, partial(exit, mainloop))
