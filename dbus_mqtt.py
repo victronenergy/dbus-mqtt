@@ -244,6 +244,22 @@ class DbusMqtt(MqttGObjectBridge):
 		for topic in sorted(self._values.keys()):
 			self.publish(topic, self._values[topic])
 
+	def __publish(self, *args, **kwargs):
+		# This method wraps the actual publishing to the broker and
+		# checks for a network error. If there is an error, it will
+		# reconnect the client, and try once more. The idea is
+		# to guard against the socketpair in paho getting into a bad
+		# state resulting in nothing working properly after that.
+		try:
+			return self._client.publish(*args, **kwargs)
+		except ConnectionError as e:
+			self._client.reconnect()
+			try:
+				return self._client.publish(*args, **kwargs)
+			except:
+				raise e
+
+
 	def _expire_stale_topics(self):
 		try:
 			for pt in self._subscriptions.cleanup(self._published, {self._system_id_topic}):
@@ -353,7 +369,7 @@ class DbusMqtt(MqttGObjectBridge):
 		# but can nevertheless be read.
 		value = self._get_dbus_value(service, '/' + path)
 		if self._add_item(service, device_instance, path, value=value) == topic:
-			self._client.publish(topic, json.dumps(dict(value=value)), retain=False)
+			self.__publish(topic, json.dumps(dict(value=value)), retain=False)
 
 	def _get_uid_by_topic(self, topic):
 		action, system_id, service_type, device_instance, path = topic.split('/', 4)
@@ -521,7 +537,7 @@ class DbusMqtt(MqttGObjectBridge):
 				return False
 			else:
 				try:
-					self._client.publish(topic,
+					self.__publish(topic,
 						None if value is None else json.dumps(dict(value=unwrap_dbus_value(value))),
 						retain=True)
 				except:
