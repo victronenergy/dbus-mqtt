@@ -6,7 +6,7 @@ https://github.com/victronenergy/venus/issues/1098.
 
 ---------
 
-A python application that publishes values from the D-Bus to an MQTT broker. The script also supports requests
+A Python application that publishes values from the D-Bus to an MQTT broker. The script also supports requests
 from the MQTT broker to change values on the local D-Bus.
 
 This application runs as a service on [Venus OS](https://github.com/victronenergy/venus/wiki). By default it is disabled. To enable,
