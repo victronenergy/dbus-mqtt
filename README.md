@@ -265,7 +265,7 @@ In case you do not receive the value you expect, please read the keep-alive sect
 
 If you have Full Control permissions on the VRM site, write requests will also be processed. For example:
 
-	mosquitto_pub -I myclient_ -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{"value":-100}' -h <broker_url> -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
+	mosquitto_pub -I myclient_ -t 'W/e0ff50a097c0/hub4/0/AcPowerSetpoint' -m '{\"value\":-100}' -h <broker_url> -u <email> -P <passwd> --cafile venus-ca.crt -p 8883
 
 Again: do not set the retain flag when sending write requests.
 
